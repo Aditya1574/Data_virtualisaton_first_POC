@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Result data</title>
+
+    <style>
+
+        table {
+
+          border-collapse: collapse;
+
+          width: 100%;
+
+          border: 1px solid #ddd;
+
+        }
+
+        th, td {
+
+          border: 1px solid #ddd;
+
+          padding: 8px;
+
+          text-align: left;
+
+        }
+
+      </style>
+
+</head>
+
+<body>
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                {% for column in columns  %}
+
+                    <th>{{column}}</th>
+
+                {%endfor%}
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            {%for row in rows %}
+
+                <tr>
+
+                    {%for element in row %}
+
+                        <td>{{element}}</td>
+
+                    {%endfor%}
+                </tr>
+
+            {%endfor%}
+
+        </tbody>
+
+    </table>
+
+</body>
+
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Primary Key Info</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Primary Key Info</h1>
+    <form action="/fulltabledata" id="primaryKeyForm">
+            {% for table_name, columns in data.items() %}
+            <div class="table-section">
+                <h2>{{ table_name }}</h2>
+                <select name="primary_key_{{ table_name }}">
+                    <option value="">Select Primary Key</option>
+                    {% for column in columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        <input type="hidden" id="primary_key_details" name="primary_key_details" value="">
+        <input type="hidden" id="host" name="host" value="{{ host }}">
+        <input type="hidden" id="user" name="user" value="{{ user }}">
+        <input type="hidden" id="password" name="password" value="{{ password }}">
+        <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
+        <button type="button" id="submitButton">Submit</button>
+    </form>
+
+    <script>
+        $(document).ready(function() {
+        $("#submitButton").click(function() {
+            var primaryKeyDetails = {};
+
+            $(".table-section").each(function() {
+                var table_name = $(this).find("h2").text();
+                var primary_key = $(this).find("select").val();
+
+                if (primary_key) {
+                    primaryKeyDetails[table_name] = primary_key;
+                }
+            });
+
+            $("#primary_key_details").val(JSON.stringify(primaryKeyDetails));
+
+        });
+    });
+    </script>
+</body>
+</html>

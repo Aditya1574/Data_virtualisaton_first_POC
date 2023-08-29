@@ -1,8 +1,9 @@
-from flask import Flask, render_template,request,redirect
+from flask import Flask, render_template,request
 import mysql.connector
 from cassandra.cluster import Cluster
 import json
 import redis
+import time
 
 cluster = Cluster()
 session = cluster.connect('samplemeta')
@@ -25,11 +26,97 @@ def check_db_existence():
             return render_template('display_views.html', data=query_index, databasename=partition_key_name)
     return render_template('Nodb_filler.html')
 
+@app.route("/process_form", methods=['POST'])
+def DBMiddleWare():
+    query_index = dict()
+    host = request.form.get('hostname')
+    user = request.form.get('username')
+    password = request.form.get('password')
+    database = request.form.get('database')
+
+
+    return render_template('table_primary_key.html',data=query_index,host=host,user=user,password=password, databasename=database)
+
+
+@app.route("/fulltabledata", methods=['POST'])
+def SaveMetaData():
+    databasename = request.form.get('dataBaseName')
+    host = request.form.get('host')
+    user = request.form.get('user')
+    password = request.form.get('password')
+    tableName_primaryKey = json.loads(request.form.get('primary_key_details'))
+
+    db_config = {
+        "host": f"{host}",
+        "user": f"{user}",
+        "password": f"{password}",
+        "database": f"{databasename}"
+    }
+
+    db_config_string = f"host : '{host}', user  : '{user}', password : '{password}', database : '{databasename}'"
+    print(tableName_primaryKey, "\n", db_config_string)
+    return "successfully got the data"
+
+    # table_to_dataFields = dict()
+    # # Connect to the MySQL database
+    # connection = mysql.connector.connect(**db_config)
+    # cursor = connection.cursor()
+    #
+    # # Replace with the desired table name
+    # query = "SHOW TABLES"
+    #
+    # # Execute the query
+    # cursor.execute(query)
+    #
+    # # Fetch the table names
+    # tables = cursor.fetchall()
+    #
+    # # Extract table names from the fetched data
+    # table_names = [table[0] for table in tables]
+    # for table_name in table_names:
+    #     try:
+    #         # Construct the query to retrieve column information
+    #         query = f"SHOW COLUMNS FROM {table_name}"
+    #
+    #         # Execute the query
+    #         cursor.execute(query)
+    #
+    #         # Fetch the column information
+    #         columns = cursor.fetchall()
+    #
+    #         # this goes up for being displayed in the front-end
+    #         column_names_to_display = [column[0] for column in columns]
+    #         query_index[table_name] = column_names_to_display
+    #
+    #         # this is for making the cassandra query
+    #         column_names = [f"'{column[0]}'" for column in columns]
+    #         column_names_string = ','.join(map(str, column_names))
+    #         table_to_dataFields[table_name] = column_names
+    #
+            # cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename,db_config,datafields) values(" \
+            #                   f"'{database}'," \
+            #                   f"'{tableName_primaryKey[table_name]}'"
+            #                   f"'{table_name}'," \
+            #                   "{" + f"{db_config_string}" + "}," \
+            #                                                 f"[{column_names_string}]" \
+            #                                                 f");"
+    #         print(cassandra_query, "\n", "Saving Table metadata to cassandra using the abobe query \n")
+    #         session.execute(cassandra_query)
+    #     except mysql.connector.Error as err:
+    #         print("Error:", err)
+    #
+    # # Close the cursor and connection
+    # cursor.close()
+    # connection.close()
+
 
 @app.route('/display_views', methods=['POST'])
 def display_data_view():
     table_data = json.loads(request.form.get('selectedData'))
     databasename = request.form.get('dataBaseName')
+    selectedForeignKeys = json.loads(request.form.get('selectedForeignKeydData'))
+
+    print(selectedForeignKeys)
     print(databasename)
     query_index = dict()
     columns_info = []
@@ -49,82 +136,20 @@ def redis_sql(data):
     try:
         r = redis.Redis(host='localhost', port=6379,
                         decode_responses=True)
-        print(r)
+        # print(r)
+        print('connected to redis...')
         for row in data:
             value = row[0:2] + row[3:]
             r.hset(name='name', key=str(row[2]), value=str(value), mapping=None, items=None)
-            print(row)
+            # print(row)
         print('Cached data to redis...')
     except Exception as e:
         print('something went wrong!', e)
 
-@app.route("/process_form", methods=['POST'])
-def SaveDBMetaData():
-    query_index = dict()
-    host = request.form.get('hostname')
-    user = request.form.get('username')
-    password = request.form.get('password')
-    database = request.form.get('database')
-
-    db_config  = {
-        "host" :  f"{host}",
-        "user" : f"{user}",
-        "password": f"{password}",
-        "database": f"{database}"
-    }
-
-    db_config_string = f"host : '{host}', user  : '{user}', password : '{password}', database : '{database}'"
-    # print(db_config_string)
-    table_to_dataFields = dict()
-    # Connect to the MySQL database
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-
-    # Replace with the desired table name
-    query = "SHOW TABLES"
-
-    # Execute the query
-    cursor.execute(query)
-
-    # Fetch the table names
-    tables = cursor.fetchall()
-
-    # Extract table names from the fetched data
-    table_names = [table[0] for table in tables]
 
 
-    for table_name in table_names:
-        try:
-            # Construct the query to retrieve column information
-            query = f"SHOW COLUMNS FROM {table_name}"
 
-            # Execute the query
-            cursor.execute(query)
 
-            # Fetch the column information
-            columns = cursor.fetchall()
-            column_names_to_display = [column[0] for column in columns]
-            query_index[table_name] = column_names_to_display
-
-            column_names = [f"'{column[0]}'" for column in columns]
-            column_names_string = ','.join(map(str, column_names))
-            table_to_dataFields[table_name] = column_names
-
-            cassandra_query = f"insert into relationalmetadata(databasename,tablename,db_config,datafields) values(" \
-                              f"'{database}'," \
-                              f"'{table_name}'," \
-                              "{" + f"{ db_config_string }" + "}," \
-                              f"[{column_names_string}]" \
-                              f");"
-            print(cassandra_query, "\n")
-            session.execute(cassandra_query)
-        except mysql.connector.Error as err:
-            print("Error:", err)
-    print("Database metadata successfully saved")
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
-    return render_template('display_views.html', data=query_index, databasename=database)
 
 def menuMaker(database) -> dict():
     selected_columns_from_tables = dict()
@@ -132,7 +157,7 @@ def menuMaker(database) -> dict():
     result = session.execute(cassandra_query)
     for row in result:
         selected_columns_from_tables[row.tablename] = row.datafields
-    print(selected_columns_from_tables)
+    # print(selected_columns_from_tables)
     return selected_columns_from_tables
 
 def DataRetriver(database,query_index):
@@ -145,7 +170,7 @@ def DataRetriver(database,query_index):
         "password": f"{result.db_config.password}",
         "database": f"{result.db_config.database}"
     }
-    print(db_config)
+    # print(db_config)
 
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -167,27 +192,24 @@ def DataRetriver(database,query_index):
     for (key,value) in query_index.items():
         table_names.append(key)
 
-    query = ""
+    query = f"select  {columns_info} from {table_names[0]}"
+
 
     no_of_tables = len(table_names)
-    if no_of_tables == 2:
-        query = f"select  {columns_info} from {table_names[0]} inner join {table_names[1]} on {table_names[0]}.id = {table_names[1]}.id"
-    else:
-        query = f"select {columns_info} from {table_names[0]} inner join {table_names[1]} on {table_names[0]}.id = {table_names[1]}.id " \
-            f"inner join {table_names[2]} on {table_names[1]}.id = {table_names[2]}.id"
+    for i in range(1,no_of_tables):
+        query += f" inner join {table_names[i]} on {table_names[i-1]}.id = {table_names[i]}.id"
+
     print(query)
     try:
         # Execute the query
+        start_time = time.time()
         cursor.execute(query)
+        end_time = time.time()
 
+        print("time taken for sql db query ", end_time - start_time)
         # Fetch all the rows
         rows = cursor.fetchall()
-
-        # Print the fetched rows
-        # print(rows)
-        for row in rows:
-            print(row)
-        # final = rows
+        # print the rows or do whatever you want with the rows
     except mysql.connector.Error as err:
         print("Error:", err)
 

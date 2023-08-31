@@ -20,17 +20,11 @@
                                 {{ column }}
                             </label>
                         {% endfor %}
-<!--                        <select class="foreign-key-select" name="foreign_key_{{ column }}">-->
-<!--                                <option value="">Select Foreign Key</option>-->
-<!--                                {% for fk_column in columns %}-->
-<!--                                    <option value="{{ fk_column }}">{{ fk_column }}</option>-->
-<!--                                {% endfor %}-->
-<!--                        </select>-->
                     </div>
                 </li>
             {% endfor %}
         </ul>
-        <input type="hidden" id="selectedData" name="selectedData" value="">
+        <input type="hidden" id=    "selectedData" name="selectedData" value="">
         <input type="hidden" id="selectedForeignKeydData" name="selectedForeignKeydData" value="">
         <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
         <button type="button" id="submitButton" class="submit-button">Submit</button>
@@ -66,18 +60,9 @@
             }
         });
 
-         $(".foreign-key-select").on("change", function() {
-                    tableLabel = $(this).closest("li").find("label").eq(0);
-                    table = tableLabel.text().trim();
-                    var foreignKey = $(this).val();
-                    if (foreignKey) {
-                    selectedForeignKeys[table] = foreignKey;
-                    }
-           });
-
         $("#submitButton").click(function() {
-            console.log(selectedData);
-            console.log(selectedForeignKeys);
+<!--            console.log(selectedData);-->
+<!--            console.log(selectedForeignKeys);-->
             $("#selectedData").val(JSON.stringify(selectedData));
             $("#selectedForeignKeydData").val(JSON.stringify(selectedForeignKeys));
             $("#myForm").submit();

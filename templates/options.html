@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Options Page</title>
+
+</head>
+<style>
+    body {
+    font-family: Arial, sans-serif;
+    background-color: #f7f7f7;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+h1 {
+    text-align: center;
+}
+
+.option-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.option-link {
+    display: block;
+    text-align: center;
+    padding: 20px 30px;
+    margin: 10px;
+    background-color: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.option-link:hover {
+    background-color: #2980b9;
+    cursor: pointer;
+}
+
+</style>
+<body>
+    <h1>Select an Option</h1>
+    <div class="option-container">
+        <a href="#" class="option-link" id="add-tables">Add New Tables</a>
+        <a href="#" class="option-link" id="generate-report">Generate Report</a>
+        <form action="/options" method="post" id="hidden-form">
+            <input type="hidden" id="selected-option" name="selected_option">
+            <input type="hidden" id="db-name" name="db_name" value="{{ databasename }}">
+        </form>
+    </div>
+
+    <script>
+        const addTablesLink = document.getElementById('add-tables');
+        const generateReportLink = document.getElementById('generate-report');
+        const selectedOptionInput = document.getElementById('selected-option');
+        const hiddenForm = document.getElementById('hidden-form');
+
+        addTablesLink.addEventListener('click', function() {
+            selectedOptionInput.value = 'add_tables';
+            console.log("the name of the database is : ",document.getElementById('db-name').value)
+            hiddenForm.submit();
+        });
+
+        generateReportLink.addEventListener('click', function() {
+            selectedOptionInput.value = 'generate_report';
+            console.log("the name of the database is : ",document.getElementById('db-name').value)
+            hiddenForm.submit();
+        });
+    </script>
+</body>
+</html>

@@ -19,7 +19,6 @@ def check_db_existence():
     partition_key_name = request.form.get('db_name')
     query = "select databasename from relationalmetadata group by databasename"
     result = session.execute(query)
-    print("in check_db ", "\n ", result)
     for row in result:
         if row.databasename == partition_key_name:
             query_index = menuMaker(partition_key_name)
@@ -27,19 +26,62 @@ def check_db_existence():
     return render_template('Nodb_filler.html')
 
 @app.route("/process_form", methods=['POST'])
-def DBMiddleWare():
+def DBMiddleWareBeforeSavingMetaData():
     query_index = dict()
     host = request.form.get('hostname')
     user = request.form.get('username')
     password = request.form.get('password')
     database = request.form.get('database')
 
+    db_config = {
+        "host": f"{host}",
+        "user": f"{user}",
+        "password": f"{password}",
+        "database": f"{database}"
+    }
 
+    table_to_dataFields = dict()
+    # Connect to the MySQL database
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+
+    # Replace with the desired table name
+    query = "SHOW TABLES"
+
+    # Execute the query
+    cursor.execute(query)
+
+    # Fetch the table names
+    tables = cursor.fetchall()
+
+    # Extract table names from the fetched data
+    table_names = [table[0] for table in tables]
+    for table_name in table_names:
+        try:
+            # Construct the query to retrieve column information
+            query = f"SHOW COLUMNS FROM {table_name}"
+
+            # Execute the query
+            cursor.execute(query)
+
+            # Fetch the column information
+            columns = cursor.fetchall()
+
+            # this goes up for being displayed in the front-end
+            column_names_to_display = [column[0] for column in columns]
+            query_index[table_name] = column_names_to_display
+
+        except mysql.connector.Error as err:
+            print("Error:", err)
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
     return render_template('table_primary_key.html',data=query_index,host=host,user=user,password=password, databasename=database)
 
 
 @app.route("/fulltabledata", methods=['POST'])
-def SaveMetaData():
+def SaveMetaDataToCassandra():
     databasename = request.form.get('dataBaseName')
     host = request.form.get('host')
     user = request.form.get('user')
@@ -52,63 +94,111 @@ def SaveMetaData():
         "password": f"{password}",
         "database": f"{databasename}"
     }
+    db_config_string = f"host: '{host}',user : '{user}',password: '{password}', database : '{databasename}'"
+    # Connect to the MySQL database
+    print(db_config_string, "\n", tableName_primaryKey)
 
-    db_config_string = f"host : '{host}', user  : '{user}', password : '{password}', database : '{databasename}'"
-    print(tableName_primaryKey, "\n", db_config_string)
-    return "successfully got the data"
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
 
-    # table_to_dataFields = dict()
-    # # Connect to the MySQL database
-    # connection = mysql.connector.connect(**db_config)
-    # cursor = connection.cursor()
-    #
-    # # Replace with the desired table name
-    # query = "SHOW TABLES"
-    #
-    # # Execute the query
-    # cursor.execute(query)
-    #
-    # # Fetch the table names
-    # tables = cursor.fetchall()
-    #
-    # # Extract table names from the fetched data
-    # table_names = [table[0] for table in tables]
-    # for table_name in table_names:
-    #     try:
-    #         # Construct the query to retrieve column information
-    #         query = f"SHOW COLUMNS FROM {table_name}"
-    #
-    #         # Execute the query
-    #         cursor.execute(query)
-    #
-    #         # Fetch the column information
-    #         columns = cursor.fetchall()
-    #
-    #         # this goes up for being displayed in the front-end
-    #         column_names_to_display = [column[0] for column in columns]
-    #         query_index[table_name] = column_names_to_display
-    #
-    #         # this is for making the cassandra query
-    #         column_names = [f"'{column[0]}'" for column in columns]
-    #         column_names_string = ','.join(map(str, column_names))
-    #         table_to_dataFields[table_name] = column_names
-    #
-            # cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename,db_config,datafields) values(" \
-            #                   f"'{database}'," \
-            #                   f"'{tableName_primaryKey[table_name]}'"
-            #                   f"'{table_name}'," \
-            #                   "{" + f"{db_config_string}" + "}," \
-            #                                                 f"[{column_names_string}]" \
-            #                                                 f");"
-    #         print(cassandra_query, "\n", "Saving Table metadata to cassandra using the abobe query \n")
-    #         session.execute(cassandra_query)
-    #     except mysql.connector.Error as err:
-    #         print("Error:", err)
-    #
-    # # Close the cursor and connection
-    # cursor.close()
-    # connection.close()
+    for table_name, primary_key in tableName_primaryKey.items():
+        print(type(table_name),type(primary_key))
+        print(table_name,primary_key)
 
+
+    for table_name,primary_key in tableName_primaryKey.items():
+        try:
+            query = f"SHOW COLUMNS FROM {table_name}"
+
+            cursor.execute(query)
+
+            # Fetch the column information
+            columns = cursor.fetchall()
+            column_names = [f"'{column[0]}'" for column in columns]
+            column_names_string = ','.join(map(str, column_names))
+
+            cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename,db_config,datafields) values(" \
+                              f"'{databasename}'," \
+                              f"'{primary_key}'," \
+                              f"'{table_name}'," \
+                              "{" + f"{db_config_string}" + "}," \
+                              f"[{column_names_string}]" \
+                              f");"
+            print(cassandra_query, "\n", "Saving Table metadata to cassandra using the abobe query \n")
+            session.execute(cassandra_query)
+
+        except mysql.connector.Error as err:
+            print("Error:", err)
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+    return render_template('options.html',databasename=databasename)
+
+@app.route('/options',methods=['POST'])
+def option_selection_middleware():
+    selected_option = request.form.get('selected_option')
+    database_name = request.form.get('db_name')
+
+    print("inside post request on /options  : ", database_name)
+    if selected_option == 'add_tables':
+        # logic for checking which table names to proceed with tables not present in cassandra
+
+        # 1. get the table names from cassandra along with db_config details using the variable database_name : dictionary
+        cassandra_query = f"select db_config from relationalmetadata where databasename='{database_name}' limit 1"
+        result = session.execute(cassandra_query)[0]
+        print(result)
+        db_config = {
+            "host": f"{result.db_config.host}",
+            "user": f"{result.db_config.user}",
+            "password": f"{result.db_config.password}",
+            "database": f"{result.db_config.database}"
+        }
+        cassandra_query = f"select tablename from relationalmetadata where databasename='{database_name}'"
+        result = session.execute(cassandra_query)
+        tables_in_cassandra = dict()
+        for element in result:
+            tables_in_cassandra[element.tablename] = True
+        # 2. use db_config detials to show return all the table names from the mysql database : list
+        connection = mysql.connector.connect(**db_config)
+        cursor = connection.cursor()
+        query = "SHOW TABLES"
+
+        # Execute the query
+        cursor.execute(query)
+
+        # Fetch the table names
+        tables = cursor.fetchall()
+
+        # Extract table names from the fetched data
+        table_names = [table[0] for table in tables]
+        # 3. those false are to be dislpayed : do something if empty list else something else
+
+        tables_not_present = []
+        for table_name in table_names:
+            if tables_in_cassandra[table_name] == False:
+                tables_not_present.append(table_name)
+
+        if len(tables_not_present) == 0:
+            return f"All tables already selected in {database_name}"
+        return render_template('add_tables.html',db_name=database_name, data=tables_not_present)
+    elif selected_option == 'generate_report':
+        # Handle generating report
+
+        # 1. using database_name get table names and column names  : make query_index
+
+        # 2. render a page  [ display_views.html ]
+        return "Generating report"
+
+@app.route('/addTableHandler',methods=['POST'])
+def SaveAddedtableMetaData():
+    selected_tables = request.form.getlist('selected_tables[]')
+    db_name = request.form.get('db_name')
+
+    print(selected_tables)
+    print("Database name : ",db_name)
+
+    return "data collected"
 
 @app.route('/display_views', methods=['POST'])
 def display_data_view():
@@ -146,11 +236,6 @@ def redis_sql(data):
     except Exception as e:
         print('something went wrong!', e)
 
-
-
-
-
-
 def menuMaker(database) -> dict():
     selected_columns_from_tables = dict()
     cassandra_query = f"select * from relationalmetadata where databasename='{database}'"
@@ -165,6 +250,7 @@ def DataRetriver(database,query_index):
     cassandra_query = f"select * from relationalmetadata where databasename='{database}'"
     result = session.execute(cassandra_query)[0]
     db_config = {
+        "host": f"{result.db_config.host}",
         "host": f"{result.db_config.host}",
         "user": f"{result.db_config.user}",
         "password": f"{result.db_config.password}",

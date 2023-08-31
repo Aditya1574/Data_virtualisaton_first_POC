@@ -186,8 +186,17 @@ def option_selection_middleware():
         # Handle generating report
 
         # 1. using database_name get table names and column names  : make query_index
+        cassandra_query = f"select tablename,datafields from relatioanlmetadata where databasename={database_name}"
 
-        # 2. render a page  [ display_views.html ]
+        result = session.execute(cassandra_query)
+
+        query_index = dict()
+        for element in result:
+            # query_index[element.tablename] = element.datafields
+            print(element.tablename, element.datafields)
+
+
+        # 2. render a page  [ generate_report.html,  ]
         return "Generating report"
 
 @app.route('/addTableHandler',methods=['POST'])

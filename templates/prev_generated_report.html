@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reports History</title>
+    <style>
+        /* Additional CSS styles */
+        ul {
+            list-style-type: none;
+        }
+
+        li {
+            margin-bottom: 20px;
+        }
+
+        form {
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .show-report-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .show-report-button:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reports</h1>
+    <ul>
+        {% for database_name, reports in data.items() %}
+        <li>
+            <h2>{{ database_name }}</h2>
+            <ul>
+                {% for report_name in reports %}
+                <li>
+                    <form action="/view_gen_report" method="post">
+                        <input type="hidden" name="report_name" value="{{ report_name }}">
+                        <input type="hidden" name="database_name" value="{{ database_name }}">
+                        <h4>{{ report_name }}</h4>
+                        <button type="submit" class="show-report-button">Show Report</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

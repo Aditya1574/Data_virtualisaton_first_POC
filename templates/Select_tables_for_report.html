@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Select Tables</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        button[type="submit"] {
+            display: block;
+            width: 100%;
+            background-color: #007BFF;
+            color: #fff;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+         nav {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            text-align: right;
+        }
+
+        /* Style for the refresh button */
+        nav button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+     <nav>
+        <form action="/refresh_route" method="post">
+            <!-- database name as hidden input  -->
+            <input type="hidden" name="databasename" value="{{ databasename }}">
+            <button type="submit">Refresh</button>
+        </form>
+    </nav>
+    <h1>Select Tables</h1>
+    <form action="/selected_tables" method="post" id="addTablesForm">
+        {% for table in tables %}
+        <div class="table-dropdown">
+            <select name="selected_tables[]">
+                <option value="Select Table">Select Table</option>
+                {% for option in tables %}
+                    <option value="{{ option }}">{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endfor %}
+
+        <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
+        <button type="button" id="submitButton" class="submit-button">Add Selected Tables</button>
+    </form>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $("#submitButton").click(function() {
+                var selectedTables = [];
+
+                // Loop through the selects to find selected tables.
+                $("select[name='selected_tables[]']").each(function() {
+                    var selectedValue = $(this).val();
+                    if (selectedValue !== "Select Table") {
+                        selectedTables.push(selectedValue);
+                    }
+                });
+
+                // Convert the selected tables to a JSON string.
+                var selectedTablesJSON = JSON.stringify(selectedTables);
+
+                // Create a hidden input to store the selected tables.
+                var hiddenInput = $("<input>")
+                    .attr("type", "hidden")
+                    .attr("name", "selected_tables")
+                    .val(selectedTablesJSON);
+
+                // Append the hidden input to the form.
+                $("#addTablesForm").append(hiddenInput);
+
+                // Submit the form.
+                $("#addTablesForm").submit();
+            });
+        });
+    </script>
+</body>
+</html>

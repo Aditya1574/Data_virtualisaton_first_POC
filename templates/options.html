@@ -49,6 +49,7 @@ h1 {
     <div class="option-container">
         <a href="#" class="option-link" id="add-tables">Add New Tables</a>
         <a href="#" class="option-link" id="generate-report">Generate Report</a>
+        <a href="#" class="option-link" id="view-generated-reports">View Generated Reports</a>
         <form action="/options" method="post" id="hidden-form">
             <input type="hidden" id="selected-option" name="selected_option">
             <input type="hidden" id="db-name" name="db_name" value="{{ databasename }}">
@@ -58,6 +59,7 @@ h1 {
     <script>
         const addTablesLink = document.getElementById('add-tables');
         const generateReportLink = document.getElementById('generate-report');
+        const viewGeneratedReportLink = document.getElementById('view-generated-reports');
         const selectedOptionInput = document.getElementById('selected-option');
         const hiddenForm = document.getElementById('hidden-form');
 
@@ -69,6 +71,12 @@ h1 {
 
         generateReportLink.addEventListener('click', function() {
             selectedOptionInput.value = 'generate_report';
+            console.log("the name of the database is : ",document.getElementById('db-name').value)
+            hiddenForm.submit();
+        });
+
+        viewGeneratedReportLink.addEventListener('click', function() {
+            selectedOptionInput.value = 'view_generated_report';
             console.log("the name of the database is : ",document.getElementById('db-name').value)
             hiddenForm.submit();
         });

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Join Tables</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<style>
+    /* styles.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    text-align: center;
+    background-color: #3498db;
+    color: #fff;
+    padding: 20px;
+}
+
+.table-section {
+    border: 1px solid #ccc;
+    margin: 20px;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+}
+
+.join-condition {
+    margin-top: 10px;
+}
+
+.checkbox-group {
+    margin-top: 10px;
+}
+
+/* Additional CSS styling can be added as needed */
+
+/* Define specific styles for form elements, buttons, etc. */
+
+</style>
+
+<body>
+    <h1>Join Tables</h1>
+    <form action="/process_selection" method="post" id="joinTablesForm">
+        {% for table_name, columns in data.items() %}
+        <div class="table-section">
+            <h2>{{ table_name }}</h2>
+            {% if not loop.last %}
+            <div class="join-condition">
+                <label for="join_table_{{ table_name }}">Join with:</label>
+                <select id="join_table_{{ table_name }}" name="join_table_{{ table_name }}">
+                    <option value="">Select Table</option>
+                    {% for other_table_name, other_columns in data.items() %}
+                        {% if other_table_name != table_name %}
+                              <option value="{{ other_table_name }}">{{ other_table_name }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <div class="checkbox-group">
+                    <label>Select Join Columns:</label>
+                    <div class="join-columns-container"></div>
+                </div>
+            </div>
+            <div class="join-columns-container-table">
+                <h3>Join Columns:</h3>
+                {% for column in columns %}
+                    <label>
+                        <input type="checkbox" name="join_columns_{{ table_name }}[]" value="{{ column }}">
+                        {{ column }}
+                    </label>
+                {% endfor %}
+            </div>
+            {% endif %}
+                <div class="checkbox-group">
+                    <label>Select Display Columns:</label>
+                    {% for column in columns %}
+                    <label>
+                        <input type="checkbox" name="display_columns_{{ table_name }}[]" value="{{ column }}">
+                        {{ column }}
+                    </label>
+                    {% endfor %}
+                </div>
+        </div>
+        {% endfor %}
+        <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
+        <input type="hidden" id="joinConditionsData" name="joinConditionsData">
+        <input type="hidden" id="displayColumnsData" name="displayColumnsData">
+        <input type="hidden" id="joinedColumnsData" name="joinedColumnsData">
+        <button type="button" id="submitButton">Submit</button>
+    </form>
+    <script>
+        $(document).ready(function() {
+
+            // Function to update join columns based on the selected join table
+            function updateJoinColumns(selectElement, joinColumnsContainer) {
+                var selectedJoinTable = selectElement.val();
+                console.log("updateJoinColumns", selectElement.val());
+                var table_name = selectElement.closest(".table-section").find("h2").text().trim();
+                var columns = {{ data|tojson|safe }};
+                var joinColumns = columns[selectedJoinTable];
+                console.log(columns, joinColumns);
+
+                // Clear existing join columns
+                joinColumnsContainer.empty();
+
+                // Add checkboxes for join columns
+                $.each(joinColumns, function(index, column) {
+                    var checkbox = $('<input type="checkbox" name="join_columns_' + table_name + '[]" value="' + column + '">');
+                    var label = $('<label>' + column + '</label>');
+                    joinColumnsContainer.append(checkbox);
+                    joinColumnsContainer.append(label);
+                });
+            }
+
+            // Initialize join columns when page loads
+            $(".join-condition select").each(function() {
+                console.log("inside initialising ")
+                var joinColumnsContainer = $(this).closest(".join-condition").find(".join-columns-container");
+                updateJoinColumns($(this), joinColumnsContainer);
+            });
+
+            // Handle changes to the join table selection
+            $(".join-condition select").change(function() {
+                console.log("inside change thing ")
+                var joinColumnsContainer = $(this).closest(".join-condition").find(".join-columns-container");
+<!--                console.log($(this));-->
+<!--                console.log($joinColumnsContainer.length > 0);-->
+                updateJoinColumns($(this), joinColumnsContainer);
+            });
+
+            $("#submitButton").click(function() {
+            // Collect and format join conditions here
+            var joinConditions = {};
+            var displayColumns = {};
+            var JoinedColumns = {}
+            $(".table-section").each(function() {
+                var table_name = $(this).find("h2").text().trim();
+                var selectedJoinTable = $(this).find(".join-condition select").val();
+                var selectedJoinColumns = $(this).find(".join-condition input[name^='join_columns_" + table_name + "']:checked").map(function() {
+                    return $(this).val();
+                }).get();
+
+                joinConditions[table_name] = {
+                    join_table: selectedJoinTable,
+                    join_columns: selectedJoinColumns
+                };
+
+                // Collect selected display columns for this table
+                var selectedDisplayColumns = $(this).find(".checkbox-group input[name^='display_columns_" + table_name + "']:checked").map(function() {
+                    return $(this).val();
+                }).get();
+
+                displayColumns[table_name] = selectedDisplayColumns;
+
+                var selectedJoinColumns = $(this).find(".join-columns-container-table input[name^='join_columns_" + table_name + "']:checked").map(function() {
+                    return $(this).val();
+                }).get();
+
+                JoinedColumns[table_name] = selectedJoinColumns;
+
+            });
+
+            // Convert the dictionaries to JSON strings
+            var joinConditionsJSON = JSON.stringify(joinConditions);
+            var displayColumnsJSON = JSON.stringify(displayColumns);
+            var JoinedColumnsJSON = JSON.stringify(JoinedColumns);
+
+            // Create hidden inputs to store the JSON data
+            $("#joinConditionsData").val(joinConditionsJSON);
+            $("#displayColumnsData").val(displayColumnsJSON);
+            $("#joinedColumnsData").val(JoinedColumnsJSON);
+            // Submit the form
+            $("#joinTablesForm").submit();
+             });
+           });
+
+    </script>
+</body>
+</html>

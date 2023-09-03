@@ -1,84 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Select Tables</title>
-
+    <title>Add more Tables</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <style>
     body {
-    font-family: Arial, sans-serif;
-    background-color: #f7f7f7;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-}
+        font-family: Arial, sans-serif;
+        background-color: #f7f7f7;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
 
-h1 {
-    text-align: center;
-}
+    h1 {
+        text-align: center;
+    }
 
-.table-list {
-    list-style: none;
-    padding: 0;
-}
+    .table-list {
+        list-style: none;
+        padding: 0;
+    }
 
-.table-label {
-    display: block;
-    margin-bottom: 10px;
-}
+    .table-label {
+        display: block;
+        margin-bottom: 10px;
+    }
 
-.submit-button {
-    display: block;
-    margin-top: 20px;
-    padding: 10px 20px;
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
+    .submit-button {
+        display: block;
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
 
-.submit-button:hover {
-    background-color: #2980b9;
-}
-
+    .submit-button:hover {
+        background-color: #2980b9;
+    }
 </style>
 <body>
     <h1>Select Tables to Add</h1>
     <form action="/addTableHandler" method="post" id="addTablesForm">
         <ul class="table-list">
-            {% for table_name in data %}
+            {% for table_name, columns in data.items() %}
                 <li>
                     <label class="table-label">
                         <input type="checkbox" name="selected_tables[]" value="{{ table_name }}">
                         {{ table_name }}
                     </label>
+                    <select name="primary_key_{{ table_name }}">
+                        <option value="">Select primary Key</option>
+                        {% for column in columns %}
+                            <option value="{{ column }}">{{ column }}</option>
+                        {% endfor %}
+                    </select>
                 </li>
             {% endfor %}
         </ul>
         <input type="hidden" id="db_name" name="db_name" value="{{ db_name }}">
+        <input type="hidden" id="selected_primary_keys" name="selected_primary_keys" value="">
         <button type="button" id="submitButton" class="submit-button">Add Selected Tables</button>
     </form>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
             $("#submitButton").click(function() {
-                var selectedTables = [];
-                $("input[name='selected_tables[]']:checked").each(function() {
-                    selectedTables.push($(this).val());
+                var selectedPrimaryKeys = {};
+                $("ul.table-list li").each(function() {
+                    var table_name = $(this).find("input[type='checkbox']").val();
+                    var primary_key = $(this).find("select").val();
+
+                    if (table_name && primary_key) {
+                        selectedPrimaryKeys[table_name] = primary_key;
+                    }
                 });
-
-                var selectedTablesInput = $("<input>")
-                    .attr("type", "hidden")
-                    .attr("name", "selected_tables")
-                    .val(selectedTables);
-
-
-                $("#addTablesForm").append(selectedTablesInput);
+                console.log(selectedPrimaryKeys)
+                $("#selected_primary_keys").val(JSON.stringify(selectedPrimaryKeys));
                 $("#addTablesForm").submit();
             });
         });

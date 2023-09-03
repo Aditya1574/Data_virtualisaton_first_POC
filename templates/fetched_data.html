@@ -123,6 +123,13 @@
     <form action="/save_report" method="post">
             <label for="report_name">Report Name:</label>
             <input type="text" id="report_name" name="report_name" required>
+            <label for="selected_pk_report">Select Primary Key for Report:</label>
+            <select id="selected_pk_report" name="selected_pk_report">
+                <option value="">Select Primary Key</option>
+                {% for column in columns %}
+                    <option value="{{ column }}">{{ column }}</option>
+                {% endfor %}
+            </select>
             <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
             <input type="hidden" id="query_generated" name="query_generated" value="{{ query_generated }}">
             <input type="hidden" id="columns_to_save" name="columns_to_save" value="{{ columns_to_save }}">

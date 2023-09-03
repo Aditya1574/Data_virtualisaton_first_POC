@@ -224,7 +224,7 @@ def option_selection_middleware():
         return render_template('Select_tables_for_report.html', databasename=database_name,tables=tables)
     elif selected_option == 'view_generated_report':
         #1. fetch generated report data using db name
-        cassandra_query = f"select report_name from saved_report_table where databasename='{database_name}'"
+        cassandra_query = f"select report_name from generated_report_data where databasename='{database_name}'"
         result = session.execute(cassandra_query)
         database_reports = dict()
         reports = []
@@ -285,7 +285,7 @@ def View_Report():
     report_name = request.form.get('report_name')
     database_name = request.form.get('database_name')
 
-    cassandra_query = f"select query_for_report,columns from saved_report_table where databasename='{database_name}' and report_name='{report_name}'"
+    cassandra_query = f"select query_for_report,columns from generated_report_data where databasename='{database_name}' and report_name='{report_name}'"
     result = session.execute(cassandra_query)[0]
 
     query = result.query_for_report
@@ -432,7 +432,9 @@ def save_report():
     databasename = request.form.get('dataBaseName')
     query = request.form.get('query_generated')
     columns_to_save = request.form.get('columns_to_save')
-    cassandra_query = f"insert into saved_report_table(databasename,report_name,query_for_report,columns) values('{databasename}','{report_name}','{query}',[{columns_to_save}])"
+    # print("data for generated report primary key  : ", request.form['selected_pk_report'])
+    pk_report =  request.form['selected_pk_report']
+    cassandra_query = f"insert into generated_report_data(databasename,report_name,query_for_report,columns,pk_report) values('{databasename}','{report_name}','{query}',[{columns_to_save}],'{pk_report}')"
 
     session.execute(cassandra_query)
 
@@ -523,7 +525,7 @@ def DataRetriver(database,query_index,table_joining_conditions,joining_keys):
         print("time taken for sql db query ", end_time - start_time)
         # Fetch all the rows
         rows = cursor.fetchall()
-        print("inside data retriever function : ", rows)
+        # print("inside data retriever function : ", rows)
         # print the rows or do whatever you want wit)h the rows
     except mysql.connector.Error as err:
         print("Error:", err)

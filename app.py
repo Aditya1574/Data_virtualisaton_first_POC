@@ -1,19 +1,294 @@
-from flask import Flask, render_template,request,redirect
+from flask import Flask, render_template,request
 import mysql.connector
 from cassandra.cluster import Cluster
 import json
 import redis
 import time
 from collections import OrderedDict
+import pandas as pd
+import xml.etree.ElementTree as ET
 
 cluster = Cluster()
 session = cluster.connect('samplemeta')
 
 app = Flask(__name__)
 
+def get_filename(file_path):
+    start = file_path.rfind('\\')
+    end = file_path.rfind('.')
+    file_name = file_path[start + 1:end]
+    return file_name
+
+def JSONflatten_dict(d, parent_key='', sep='.'):
+    items = {}
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.update(JSONflatten_dict(v, new_key, sep=sep))
+        elif isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                # Handle nested dictionaries within the array
+                for i, item in enumerate(v):
+                    items.update(JSONflatten_dict(item, new_key, sep=sep))
+            else:
+                # Convert array values to a single string with comma separation
+                items[new_key] = ', '.join(map(str, v))
+        else:
+            items[new_key] = v
+
+    return items
+
+
+def flatten_xml(element, parent_key='', separator='.'):
+    flattened_data = {}
+
+    for child_element in element:
+        child_key = parent_key + separator + child_element.tag
+        if len(child_element) > 0:
+            flattened_data.update(flatten_xml(child_element, child_key, separator))
+        else:
+            flattened_data[child_key] = child_element.text
+
+    return flattened_data
+
 @app.route('/', methods=['GET'])
 def hello_world():
     return render_template('index.html')
+
+
+@app.route('/options_selected', methods=['POST'])
+def options_selected():
+    selected_options = request.form.getlist('options[]')
+    # print(selected_options)
+    return render_template('data_collection.html',selected_options=selected_options)
+
+@app.route('/data_collected',methods=['POST'])
+def collected_data_processing():
+
+    relational_data = dict()
+    json_data = dict()
+    xml_data = dict()
+    excel_data = dict()
+
+    if request.form.get('relational-data'):
+        relational_data = json.loads(request.form.get('relational-data'))
+        print(relational_data)
+    if request.form.get('json-data'):
+        json_data = json.loads(request.form.get('json-data'))
+    if request.form.get('xml-data'):
+        xml_data = json.loads(request.form.get('xml-data'))
+    if request.form.get('excel-data'):
+        excel_data = json.loads(request.form.get('excel-data'))
+        print(excel_data)
+
+    table_names_send = []
+    relational_present = False
+    databasename=""
+    if relational_data:
+
+        db_config={
+            "host": relational_data['hostname'],
+            "user": relational_data['user'],
+            "password": relational_data['password'],
+            "database": relational_data['database']
+        }
+        databasename=relational_data['database']
+        # Connect to the MySQL database
+        # right now fetching from sql server will fetch from cassandra
+        connection = mysql.connector.connect(**db_config)
+        cursor = connection.cursor()
+
+        # Replace with the desired table name
+        query = "SHOW TABLES"
+
+        # Execute the query
+        cursor.execute(query)
+
+        # Fetch the table names
+        tables = cursor.fetchall()
+
+        # Extract table names from the fetched data
+        table_names_send = [table[0] for table in tables]
+        relational_present = True
+
+        print(table_names_send)
+
+        cursor.close()
+        connection.close()
+
+    excel_present = False
+    sheet_names_send = []
+    excel_filepath = ""
+    if excel_data:
+        # Replace 'your_file.xlsx' with the path to your Excel file
+        excel_filepath = excel_data['excel_filepath']
+
+        # Using ExcelFile object
+        xls = pd.ExcelFile(excel_filepath)
+        sheet_names = xls.sheet_names
+
+        # Using pd.read_excel
+        sheet_names_send = pd.ExcelFile(excel_filepath).sheet_names
+        excel_present = True
+
+        print(sheet_names_send)
+
+    json_present = False
+    json_filename = ""
+    json_filepath = ""
+    if json_data:
+        json_filepath = json_data['json_filepath']
+        json_filename = get_filename(json_filepath)
+        json_present = True
+        print(json_filename)
+
+    xml_present = False
+    xml_filename = ""
+    xml_filepath = ""
+    if xml_data:
+        xml_filepath = xml_data['xml_filepath']
+        xml_filename = get_filename(xml_filepath)
+        xml_present = True
+        print(xml_filename)
+
+
+    return render_template('view_selection.html',relational_present=relational_present,tables=table_names_send,databasename=databasename,
+                           excel_present=excel_present,sheet_names=sheet_names_send,excel_filepath=excel_filepath,
+                           json_present=json_present,json_filename=json_filename,json_filepath=json_filepath,
+                           xml_present=xml_present,xml_filename=xml_filename,xml_filepath=xml_filepath)
+
+
+@app.route('/data_selected',methods=['POST'])
+def generate_columns():
+
+    # 1. relational database
+    selected_tables = request.form.getlist('selected_tables[]')
+    relational_present = False
+    table_columns = dict()
+    databasename = ""
+    if selected_tables:
+        relational_present = True
+        databasename = request.form.get('databasename')
+
+        cassandra_query = f"select db_config from relationalmetadata where databasename='{databasename}' limit 1"
+        result = session.execute(cassandra_query)[0]
+        print(result)
+        db_config = {
+            "host": f"{result.db_config.host}",
+            "user": f"{result.db_config.user}",
+            "password": f"{result.db_config.password}",
+            "database": f"{result.db_config.database}"
+        }
+
+        connection = mysql.connector.connect(**db_config)
+        cursor = connection.cursor()
+
+
+        for table_name in selected_tables:
+            try:
+                query = f"SHOW COLUMNS FROM {table_name}"
+
+                cursor.execute(query)
+
+                # Fetch the column information
+                columns = cursor.fetchall()
+
+                table_columns[table_name] = [column[0] for column in columns]
+            except mysql.connector.Error as err:
+                print("Error:", err)
+
+
+    # 2. excel database
+    selected_sheets = request.form.getlist('selected_sheets[]')
+    excel_filepath = request.form.get('excel_filepath')
+
+    excel_present = False
+    sheet_columns = dict()
+    if selected_sheets:
+        excel_present = True
+        for sheet_name in selected_sheets:
+            df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
+
+            # Get the column names as a list
+            column_names = df.columns.tolist()
+
+            sheet_columns[sheet_name] = column_names
+
+    # 3. json database
+    json_filepath = request.form.get('json_filepath')
+    json_filename = request.form.get('json_filename')
+    JSONfilename_attr_names = dict()
+    json_present = False
+    if json_filepath:
+
+        json_present = True
+        # Open and load the JSON file
+        with open(json_filepath, 'r') as file:
+            data = json.load(file)
+
+        # Access the first object (usually the first item in a JSON array)
+        first_object = data[0]
+
+        JSONfilename_attr_names[json_filename] = JSONflatten_dict(first_object).keys()
+
+
+    # 4. xml database
+    xml_filepath = request.form.get('xml_filepath')
+    xml_filename = request.form.get('xml_filename')
+    xml_present = False
+    XMLfilename_attr_names = dict()
+    if xml_filepath:
+            xml_present = True
+
+            # Parse the XML file
+            with open(xml_filepath, "r") as xml_file:
+                xml_content = xml_file.read()
+
+            # Step 2: Parse the XML content into an XML tree
+            root = ET.fromstring(xml_content)
+
+            XMLfilename_attr_names[xml_filename] = [attr_name[1:] for attr_name in flatten_xml(root).keys()]
+            # print(XMLfilename_attr_names)
+            # print(XMLfilename_attr_names[xml_filename], type(XMLfilename_attr_names[xml_filename]))
+
+
+    final_tables_data = dict()
+
+    if relational_present:
+        print(table_columns)
+        for key,value in table_columns.items():
+            final_tables_data[key + ":relational"] = value
+
+    if excel_present:
+        print(sheet_columns)
+        for key,value in sheet_columns.items():
+            final_tables_data[key + ":excel"] = value
+    # if json_present:
+    #     print(JSONfilename_attr_names)
+    #     final_tables_data[json_filename + ":JSON"] = JSONfilename_attr_names
+
+    if xml_present:
+        print(XMLfilename_attr_names)
+        final_tables_data[xml_filename + ":XML"] = XMLfilename_attr_names[xml_filename]
+
+    return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename)
+
+@app.route('/get_join_data', methods=['POST'])
+def Data_joiner():
+    db_name = request.form.get('databasename')
+    table_column = json.loads(request.form.get('displayColumnsData'))
+    table_join_conditions = json.loads(request.form.get('joinConditionsData'))
+    table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
+
+    print("inside /get_join_data : \n")
+    print(db_name)
+    print("displayColumnsdata : ", table_column)
+    print("joinConditionsData : ", table_joining_keys)
+    print("joinedColumnsData : ", table_join_conditions)
+
+
+
+    return "joining data got successfully!"
 
 @app.route('/check_database', methods=['POST'])
 def check_db_existence():
@@ -407,9 +682,10 @@ def display_data_view():
     table_join_conditions = json.loads(request.form.get('joinConditionsData'))
     table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
     column_info = []
-    print(table_column)
-    print(table_joining_keys)
-    print(table_join_conditions)
+    print("inside /process_selection : \n")
+    print("displayColumnsdata : ", table_column)
+    print("joinConditionsData : ",table_joining_keys)
+    print("joinedColumnsData : ",table_join_conditions)
 
     for key,value in table_column.items():
         column_info = column_info + value
@@ -533,6 +809,7 @@ def DataRetriver(database,query_index,table_joining_conditions,joining_keys):
     cursor.close()
     connection.close()
     return rows,query,colunms_to_save_string
+
 
 
 if __name__ == '__main__':

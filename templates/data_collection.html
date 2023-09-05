@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Data Source Information</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<style>
+    /* Body styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Page container */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Heading styles */
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+h2 {
+    font-size: 18px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+/* Form styles */
+form ul {
+    list-style: none;
+    padding: 0;
+}
+
+form li {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+/* Button styles */
+button[type="submit"] {
+    background-color: #007bff;
+    color: #fff;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+button[type="submit"]:hover {
+    background-color: #0056b3;
+}
+
+/* Modal styles */
+.modal-dialog {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.modal-content {
+    border: none;
+}
+
+.modal-header {
+    border-bottom: none;
+}
+
+.btn-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    color: #333;
+}
+
+</style>
+<body>
+    <h1>Data Source Information</h1>
+    <form action="/data_collected" method="post">
+        <ul>
+            {% if "Relational" in selected_options %}
+            <li>
+                <h2>Relational Database</h2>
+                <label for="relational-hostname">Hostname:</label>
+                <input type="text" id="relational-hostname" name="relational-hostname"><br>
+                <label for="relational-user">User:</label>
+                <input type="text" id="relational-user" name="relational-user"><br>
+                <label for="relational-password">Password:</label>
+                <input type="password" id="relational-password" name="relational-password"><br>
+                <label for="relational-database">Database Name:</label>
+                <input type="text" id="relational-database" name="relational-database"><br>
+
+                <input type="hidden" name="relational-data" value="">
+            </li>
+            {% endif %}
+            {% if "XML" in selected_options %}
+            <li>
+                <h2>XML Data</h2>
+                <label for="xml-filepath">Filepath:</label>
+                <input type="text" id="xml-filepath" name="xml-filepath"><br>
+
+                <input type="hidden" name="xml-data" value="">
+            </li>
+            {% endif %}
+            {% if "JSON" in selected_options %}
+            <li>
+                <h2>JSON Data</h2>
+                <label for="json-filepath">Filepath:</label>
+                <input type="text" id="json-filepath" name="json-filepath"><br>
+
+                <input type="hidden" name="json-data" value="">
+            </li>
+            {% endif %}
+            {% if "Excel" in selected_options %}
+            <li>
+                <h2>Excel Data</h2>
+                <label for="excel-filepath">Filepath:</label>
+                <input type="text" id="excel-filepath" name="excel-filepath"><br>
+                <input type="hidden" name="excel-data" value="">
+            </li>
+            {% endif %}
+        </ul>
+        <button type="submit">Submit</button>
+    </form>
+    <script>
+         $(document).ready(function() {
+            $("#relational-hostname, #relational-user, #relational-password, #relational-database").on("input", function() {
+                var dataSourceName = $(this).attr("id").split("-")[0];
+                var dataInputName = dataSourceName + "-data";
+                var dataInput = $("input[name='" + dataInputName + "']");
+                var data = {
+                    hostname: $("#relational-hostname").val(),
+                    user: $("#relational-user").val(),
+                    password: $("#relational-password").val(),
+                    database: $("#relational-database").val()
+                };
+                dataInput.val(JSON.stringify(data));
+            });
+            $("#xml-filepath").on("input", function() {
+                var dataSourceName = $(this).attr("id").split("-")[0];
+                var dataInputName = dataSourceName + "-data";
+                var dataInput = $("input[name='" + dataInputName + "']");
+                var data = {
+                    xml_filepath: $("#xml-filepath").val()
+                };
+                dataInput.val(JSON.stringify(data));
+            });
+            $("#json-filepath").on("input", function() {
+                var dataSourceName = $(this).attr("id").split("-")[0];
+                var dataInputName = dataSourceName + "-data";
+                var dataInput = $("input[name='" + dataInputName + "']");
+                var data = {
+                    json_filepath: $("#json-filepath").val()
+                };
+                dataInput.val(JSON.stringify(data));
+            });
+            $("#excel-filepath, #excel-worksheetname").on("input", function() {
+                var dataSourceName = $(this).attr("id").split("-")[0];
+                var dataInputName = dataSourceName + "-data";
+                var dataInput = $("input[name='" + dataInputName + "']");
+                var data = {
+                    excel_filepath: $("#excel-filepath").val()
+                };
+                dataInput.val(JSON.stringify(data));
+            });
+         });
+    </script>
+</body>
+</html>

@@ -42,8 +42,8 @@ h1 {
 </style>
 
 <body>
-    <h1>Join Tables here!</h1>
-    <form action="/process_selection" method="post" id="joinTablesForm">
+    <h1>Join Tables</h1>
+    <form action="/get_join_data" method="post" id="joinTablesForm">
         {% for table_name, columns in data.items() %}
         <div class="table-section">
             <h2>{{ table_name }}</h2>
@@ -84,7 +84,7 @@ h1 {
                 </div>
         </div>
         {% endfor %}
-        <input type="hidden" id="dataBaseName" name="dataBaseName" value="{{ databasename }}">
+        <input type="hidden" id="databasename" name="databasename" value="{{ databasename }}">
         <input type="hidden" id="joinConditionsData" name="joinConditionsData">
         <input type="hidden" id="displayColumnsData" name="displayColumnsData">
         <input type="hidden" id="joinedColumnsData" name="joinedColumnsData">
@@ -125,6 +125,8 @@ h1 {
             $(".join-condition select").change(function() {
                 console.log("inside change thing ")
                 var joinColumnsContainer = $(this).closest(".join-condition").find(".join-columns-container");
+<!--                console.log($(this));-->
+<!--                console.log($joinColumnsContainer.length > 0);-->
                 updateJoinColumns($(this), joinColumnsContainer);
             });
 

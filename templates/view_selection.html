@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Data Selection</title>
+</head>
+<style>
+    body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 20px;
+}
+
+h1 {
+    color: #333;
+}
+
+h2 {
+    color: #555;
+    margin-top: 20px;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    margin: 5px 0;
+}
+
+label {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: bold;
+    color: #333;
+}
+
+input[type="checkbox"] {
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+button[type="submit"] {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+button[type="submit"]:hover {
+    background-color: #0056b3;
+}
+
+</style>
+<body>
+    <h1>Data Selection</h1>
+    <form action="/data_selected" method="post">
+        {% if relational_present %}
+        <h2>Relational Database Tables:</h2>
+        <ul>
+            {% for table in tables %}
+            <li>
+                <label>
+                    <input type="checkbox" name="selected_tables[]" value="{{ table }}">
+                    {{ table }}
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+        <input type="hidden" id="databasename" name="databasename" value="{{ databasename }}">
+        {% endif %}
+
+        {% if excel_present %}
+        <h2>Excel Sheets:</h2>
+        <ul>
+            {% for sheet in sheet_names %}
+            <li>
+                <label>
+                    <input type="checkbox" name="selected_sheets[]" value="{{ sheet }}">
+                    {{ sheet }}
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+        <input type="hidden" id="excel_filepath" name="excel_filepath" value="{{ excel_filepath }}">
+        {% endif %}
+
+        {% if json_present %}
+        <h2>JSON Data:</h2>
+        <p>Selected JSON file: {{ json_filename }}</p>
+        <input type="hidden" id="json_filepath" name="json_filepath" value="{{ json_filepath }}">
+        <input type="hidden" id="json_filename" name="json_filename" value="{{ json_filename }}">
+        {% endif %}
+
+        {% if xml_present %}
+        <h2>XML Data:</h2>
+        <p>Selected XML file: {{ xml_filename }}</p>
+        <input type="hidden" id="xml_filepath" name="xml_filepath" value="{{ xml_filepath }}">
+        <input type="hidden" id="xml_filename" name="xml_filename" value="{{ xml_filename }}">
+        {% endif %}
+
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

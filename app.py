@@ -1,17 +1,25 @@
-from flask import Flask, render_template,request
 import mysql.connector
 from cassandra.cluster import Cluster
 import json
-import redis
-import time
-from collections import OrderedDict
 import pandas as pd
 import xml.etree.ElementTree as ET
+import time
+from flask import Flask, render_template,request
+from collections import OrderedDict
+import redis
 
 cluster = Cluster()
 session = cluster.connect('samplemeta')
 
 app = Flask(__name__)
+
+def is_integer(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
 
 def get_filename(file_path):
     start = file_path.rfind('\\')
@@ -19,7 +27,50 @@ def get_filename(file_path):
     file_name = file_path[start + 1:end]
     return file_name
 
-def JSONflatten_dict(d, parent_key='', sep='.'):
+# function for JSON retrieving data
+
+def flatten_json(json_obj,flattened_data, separator='_', parent_key=''):
+    for key, value in json_obj.items():
+        new_key = f"{parent_key}{separator}{key}" if parent_key else key
+        if isinstance(value, dict):
+            flattened_data.update(flatten_json(value,flattened_data, separator, new_key))
+        elif isinstance(value, list):
+            sub_dict = {}
+            for i, item in enumerate(value):
+                if isinstance(item, dict):
+                    sub_dict.update(flatten_json(item,flattened_data, separator, f"{new_key}{separator}{i}"))
+                else:
+                    sub_key = f"{new_key}{separator}{key}"
+                    if sub_key not in sub_dict:
+                        sub_dict[sub_key] = []
+                    sub_dict[sub_key].append(item)
+            flattened_data.update(sub_dict)
+        else:
+            if new_key not in flattened_data:
+                flattened_data[new_key] = []
+            flattened_data[new_key].append(value)
+    return flattened_data
+
+""""
+
+# usage 
+
+myjson_data = [
+json docs
+]
+# Flatten the JSON data
+flattened_data = {}
+for json_data in myjson_data:
+    flattened_data = flatten_json(json_data,flattened_data)
+
+flattened_data contains the data flattened keys against list of values, index --> record
+
+"""
+
+
+# fucntion for column names
+
+def JSONflatten_dict(d, parent_key='', sep='_'):
     items = {}
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -27,29 +78,108 @@ def JSONflatten_dict(d, parent_key='', sep='.'):
             items.update(JSONflatten_dict(v, new_key, sep=sep))
         elif isinstance(v, list):
             if v and isinstance(v[0], dict):
-                # Handle nested dictionaries within the array
                 for i, item in enumerate(v):
-                    items.update(JSONflatten_dict(item, new_key, sep=sep))
+                    items.update(JSONflatten_dict(item, f"{new_key}_{i}", sep=sep))
             else:
-                # Convert array values to a single string with comma separation
-                items[new_key] = ', '.join(map(str, v))
+                items[new_key] = v
         else:
             items[new_key] = v
-
     return items
 
 
-def flatten_xml(element, parent_key='', separator='.'):
-    flattened_data = {}
+"""
+# Your first JSON record (replace with your data)
+json_data = {
+    "employee": {
+        "id": 12345,
+        "name": "John Doe",
+        "phones": [{"type": "home", "number": "555-1234"}, {"type": "work", "number": "555-5678"}]
+    }
+}
+# Flatten the JSON data
+flattened_data = flatten_dict(json_data)
 
-    for child_element in element:
+# Print the flattened data
+for key, value in flattened_data.items():
+    print(f"{key}: {value}")
+"""
+
+# function for extracting data from xml
+
+def get_xml_data(element, flattened_data, parent_key='', separator='.'):
+    for i, child_element in enumerate(element):
         child_key = parent_key + separator + child_element.tag
         if len(child_element) > 0:
-            flattened_data.update(flatten_xml(child_element, child_key, separator))
+            if len(child_element) == 2:
+                child_key = child_key + f"[{i}]"
+            child_data = get_xml_data(child_element, flattened_data, child_key, separator)
+            if child_key in flattened_data:
+                if not isinstance(flattened_data[child_key], list):
+                    flattened_data[child_key] = [flattened_data[child_key]]
+                flattened_data[child_key].append(child_data[child_key])
+            else:
+                flattened_data.update(child_data)
         else:
-            flattened_data[child_key] = child_element.text
+            child_key = child_key
+            if child_key in flattened_data:
+                if not isinstance(flattened_data[child_key], list):
+                    flattened_data[child_key] = [flattened_data[child_key]]
+                flattened_data[child_key].append(child_element.text)
+            else:
+                flattened_data[child_key] = [child_element.text]
 
     return flattened_data
+
+"""
+
+# usage
+
+xml_data = # enclosed inside triple quotes also inside root element
+
+# Parse the XML data
+root = ET.fromstring(xml_data)
+
+# Flatten the XML data
+flattened_data = {}
+flattened_data = get_xml_data(root, flattened_data)
+
+# Print the flattened data
+for key, value in flattened_data.items():
+    print(f"{key}: {value}")
+"""
+
+# for extractiing the column names for xml data using the first record
+
+def flatten_xml(element, flattened_keys, parent_key='', separator='.'):
+    for i, child_element in enumerate(element):
+        child_key = parent_key + separator + child_element.tag
+        if len(child_element) > 0:
+            if len(child_element) == 2:
+                child_key = child_key + f".{i}"
+            flatten_xml(child_element, flattened_keys, child_key, separator)
+        else:
+            child_key = child_key
+            flattened_keys.append(child_key)
+    return flattened_keys
+
+"""
+
+xml_data = # first xml record enclosed inside triple quotes
+
+# Parse the XML data
+root = ET.fromstring(xml_data)
+
+# Flatten the XML data
+flattened_data = []
+flattened_data = flatten_xml(root, flattened_data)
+
+# Print the flattened data
+for element in flattened_data:
+    print(element)
+"""
+
+
+
 
 @app.route('/', methods=['GET'])
 def hello_world():
@@ -111,7 +241,7 @@ def collected_data_processing():
         table_names_send = [table[0] for table in tables]
         relational_present = True
 
-        print(table_names_send)
+        # print(table_names_send)
 
         cursor.close()
         connection.close()
@@ -131,7 +261,7 @@ def collected_data_processing():
         sheet_names_send = pd.ExcelFile(excel_filepath).sheet_names
         excel_present = True
 
-        print(sheet_names_send)
+        # print(sheet_names_send)
 
     json_present = False
     json_filename = ""
@@ -140,7 +270,7 @@ def collected_data_processing():
         json_filepath = json_data['json_filepath']
         json_filename = get_filename(json_filepath)
         json_present = True
-        print(json_filename)
+        # print(json_filename)
 
     xml_present = False
     xml_filename = ""
@@ -149,146 +279,321 @@ def collected_data_processing():
         xml_filepath = xml_data['xml_filepath']
         xml_filename = get_filename(xml_filepath)
         xml_present = True
-        print(xml_filename)
+        # print(xml_filename)
+
+    selected_tables_list = []
+
+    if relational_present:
+        for table_name in table_names_send:
+            selected_tables_list.append(table_name + ":relational")
+    if excel_present:
+        for sheet_name in sheet_names_send:
+            selected_tables_list.append(sheet_name + ":excel")
+    if xml_present:
+        selected_tables_list.append(xml_filename + ":XML")
+    if json_present:
+        selected_tables_list.append(json_filename + ":JSON")
 
 
-    return render_template('view_selection.html',relational_present=relational_present,tables=table_names_send,databasename=databasename,
-                           excel_present=excel_present,sheet_names=sheet_names_send,excel_filepath=excel_filepath,
-                           json_present=json_present,json_filename=json_filename,json_filepath=json_filepath,
-                           xml_present=xml_present,xml_filename=xml_filename,xml_filepath=xml_filepath)
+    return render_template('view_selection.html',tables=selected_tables_list,databasename=databasename,excel_filepath=excel_filepath,json_filepath=json_filepath,xml_filepath=xml_filepath)
+
+
+def GetColumnNames(databasename,table_name):
+    cassandra_query = f"select db_config from relationalmetadata where databasename='{databasename}' limit 1"
+    result = session.execute(cassandra_query)[0]
+    print(result)
+    db_config = {
+        "host": f"{result.db_config.host}",
+        "user": f"{result.db_config.user}",
+        "password": f"{result.db_config.password}",
+        "database": f"{result.db_config.database}"
+    }
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    column_names = []
+    try:
+        query = f"SHOW COLUMNS FROM {table_name}"
+
+        cursor.execute(query)
+
+        # Fetch the column information
+        columns = cursor.fetchall()
+
+        column_names = [column[0] for column in columns]
+    except mysql.connector.Error as err:
+        print("Error:", err)
+
+    return column_names
+
+def GetSheetNames(excel_filepath,sheet_name):
+    df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
+
+    # Get the column names as a list
+    column_names = df.columns.tolist()
+
+    return column_names
+
+def GetXMLFlattenAttrNames(xml_filepath):
+    tree = ET.parse(xml_filepath)
+    root = tree.getroot()
+
+    # Find the first child element of the root
+    first_child = list(root)[0]
+
+    # Get the name of the first child element
+    first_child_name = first_child.tag
+
+    first_record = root.find(first_child_name)  # Change 'record' to the actual tag name
+
+    # Create a new XML element tree containing only the root and the first record
+    new_root = ET.Element(root.tag)
+    new_root.append(first_record)
+
+    # Create a new XML tree with the new root
+    new_tree = ET.ElementTree(new_root)
+
+    # Serialize the new tree to a string
+    first_record_xml = ET.tostring(new_tree.getroot(), encoding='utf-8').decode('utf-8')
+
+    first_element = ET.fromstring(first_record_xml)
+    flattened_data = []
+    return flatten_xml(first_element,flattened_data)
+
+def GetJSONFlattenAttrNames(json_filepath):
+
+    with open(json_filepath, 'r') as file:
+        data = json.load(file)
+
+    # Access the first object (usually the first item in a JSON array)
+    first_object = data[0]
+
+    return JSONflatten_dict(first_object).keys()
+
 
 
 @app.route('/data_selected',methods=['POST'])
 def generate_columns():
 
-    # 1. relational database
-    selected_tables = request.form.getlist('selected_tables[]')
-    relational_present = False
-    table_columns = dict()
-    databasename = ""
-    if selected_tables:
-        relational_present = True
-        databasename = request.form.get('databasename')
-
-        cassandra_query = f"select db_config from relationalmetadata where databasename='{databasename}' limit 1"
-        result = session.execute(cassandra_query)[0]
-        print(result)
-        db_config = {
-            "host": f"{result.db_config.host}",
-            "user": f"{result.db_config.user}",
-            "password": f"{result.db_config.password}",
-            "database": f"{result.db_config.database}"
-        }
-
-        connection = mysql.connector.connect(**db_config)
-        cursor = connection.cursor()
-
-
-        for table_name in selected_tables:
-            try:
-                query = f"SHOW COLUMNS FROM {table_name}"
-
-                cursor.execute(query)
-
-                # Fetch the column information
-                columns = cursor.fetchall()
-
-                table_columns[table_name] = [column[0] for column in columns]
-            except mysql.connector.Error as err:
-                print("Error:", err)
-
-
-    # 2. excel database
-    selected_sheets = request.form.getlist('selected_sheets[]')
-    excel_filepath = request.form.get('excel_filepath')
-
-    excel_present = False
-    sheet_columns = dict()
-    if selected_sheets:
-        excel_present = True
-        for sheet_name in selected_sheets:
-            df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
-
-            # Get the column names as a list
-            column_names = df.columns.tolist()
-
-            sheet_columns[sheet_name] = column_names
-
-    # 3. json database
-    json_filepath = request.form.get('json_filepath')
-    json_filename = request.form.get('json_filename')
-    JSONfilename_attr_names = dict()
-    json_present = False
-    if json_filepath:
-
-        json_present = True
-        # Open and load the JSON file
-        with open(json_filepath, 'r') as file:
-            data = json.load(file)
-
-        # Access the first object (usually the first item in a JSON array)
-        first_object = data[0]
-
-        JSONfilename_attr_names[json_filename] = JSONflatten_dict(first_object).keys()
-
-
-    # 4. xml database
-    xml_filepath = request.form.get('xml_filepath')
-    xml_filename = request.form.get('xml_filename')
-    xml_present = False
-    XMLfilename_attr_names = dict()
-    if xml_filepath:
-            xml_present = True
-
-            # Parse the XML file
-            with open(xml_filepath, "r") as xml_file:
-                xml_content = xml_file.read()
-
-            # Step 2: Parse the XML content into an XML tree
-            root = ET.fromstring(xml_content)
-
-            XMLfilename_attr_names[xml_filename] = [attr_name[1:] for attr_name in flatten_xml(root).keys()]
-            # print(XMLfilename_attr_names)
-            # print(XMLfilename_attr_names[xml_filename], type(XMLfilename_attr_names[xml_filename]))
-
-
     final_tables_data = dict()
+    excel_filepath = request.form.get('excel_filepath')
+    json_filepath = request.form.get('json_filepath')
+    xml_filepath = request.form.get('xml_filepath')
+    databasename = request.form.get('databasename')
+    selected_data = json.loads(request.form.get('selected_tables'))
 
-    if relational_present:
-        print(table_columns)
-        for key,value in table_columns.items():
-            final_tables_data[key + ":relational"] = value
+    # Looping through the selected_data thing getting table,sheets,json and xml files in order
+    for element_name in selected_data:
+        start = element_name.rfind(':')
+        end = element_name.find(':')
+        db_type = element_name[start + 1:]
+        entity_name = element_name[:end]
+        # 1. relational database
+        if db_type == 'relational':
+            final_tables_data[element_name] = GetColumnNames(databasename,entity_name)
+        # 2. excel database
+        elif db_type == 'excel':
+            final_tables_data[element_name] = GetSheetNames(excel_filepath,entity_name)
+        # 3. json database
+        elif db_type == 'JSON':
+            final_tables_data[element_name] = [key for key in GetJSONFlattenAttrNames(json_filepath)]
+            # doing this as what is returned from the function  is dict_key object
+        # 4. xml database
+        else:
+            final_tables_data[element_name] = GetXMLFlattenAttrNames(xml_filepath)
 
-    if excel_present:
-        print(sheet_columns)
-        for key,value in sheet_columns.items():
-            final_tables_data[key + ":excel"] = value
-    # if json_present:
-    #     print(JSONfilename_attr_names)
-    #     final_tables_data[json_filename + ":JSON"] = JSONfilename_attr_names
+    print(final_tables_data)
+    return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename,
+                           excel_filepath=excel_filepath,json_filepath=json_filepath,xml_filepath=xml_filepath)
 
-    if xml_present:
-        print(XMLfilename_attr_names)
-        final_tables_data[xml_filename + ":XML"] = XMLfilename_attr_names[xml_filename]
 
-    return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename)
+def GetRelationalDataAsDataFrame(databasename, table_name, column_names):
+    cassandra_query = f"select db_config from relationalmetadata where databasename='{databasename}' limit 1"
+    result = session.execute(cassandra_query)[0]
+    # print(result)
+    db_config = {
+        "host": f"{result.db_config.host}",
+        "user": f"{result.db_config.user}",
+        "password": f"{result.db_config.password}",
+        "database": f"{result.db_config.database}"
+    }
+    # 2. connect to mysql
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    # 3. make a query to mysql server and fetch the data
+    columns_for_query = ",".join(column_names)
+    query = f"select {columns_for_query} from {table_name}"
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    # 4. convert the data into polars dataframe
+    relational_df = pd.DataFrame(rows,columns=column_names )
+
+    # print("Relational Dataframe \n", relational_df)
+
+    return relational_df
+
+def GetJSONDataAsDataFrame(json_filepath,attr_names):
+    # reading json data and gettig it as a dictionary
+    myjson_data = []
+    try:
+        with open(json_filepath, 'r') as json_file:
+            myjson_data = json_file.read()
+        # Now, json_data contains the entire JSON content as a string
+        # print(myjson_data)
+        myjson_data = json.loads(myjson_data)
+    except FileNotFoundError:
+        print(f"JSON File not found: {json_filepath}")
+
+    json_flattened_data = {}
+    for json_data in myjson_data:
+        json_flattened_data = flatten_json(json_data, json_flattened_data)
+
+    # DF_JSON
+    json_df = pd.DataFrame(json_flattened_data)
+    # print("JSON Dataframe \n", json_df)
+
+    return json_df
+
+def GetXMLDataAsDataFrame(xml_filepath,attr_names):
+    xml_data = ""
+    try:
+        with open(xml_filepath, 'r') as xml_file:
+            xml_data = xml_file.read()
+            # Now, xml_data contains the entire XML document as a string
+            # print(xml_data)
+    except FileNotFoundError:
+        print(f"XML File not found: {xml_filepath}")
+
+    xml_flattened_data = {}
+    root = ET.fromstring(xml_data)
+
+    # Flatten  XML data
+
+    xml_flattened_data = get_xml_data(root, xml_flattened_data)
+
+    # print(xml_flattened_data)
+
+    # DF_XML
+    xml_df = pd.DataFrame(xml_flattened_data)
+
+    return xml_df
+
+def GetExcelDataAsDataFrame(excel_filepath,sheet_name,colunms):
+    try:
+        # Read the Excel file into a Pandas DataFrame
+        df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
+
+        # Select only the required columns from the DataFrame
+        df = df[colunms]
+
+        return df
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return None
+
+def BifervateElement(element):
+    start = element.rfind(':')
+    end = element.find(':')
+
+    return element[:end],element[start + 1:]
+
 
 @app.route('/get_join_data', methods=['POST'])
-def Data_joiner():
-    db_name = request.form.get('databasename')
+def DataJoiner():
+    databasename = request.form.get('databasename')
+    excel_filepath = request.form.get('excel_filepath')
+    json_filepath = request.form.get('json_filepath')
+    xml_filepath = request.form.get('xml_filepath')
+
     table_column = json.loads(request.form.get('displayColumnsData'))
     table_join_conditions = json.loads(request.form.get('joinConditionsData'))
     table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
 
+    print(table_column)
+    print(table_joining_keys)
+    print(table_join_conditions)
+
+
     print("inside /get_join_data : \n")
-    print(db_name)
-    print("displayColumnsdata : ", table_column)
-    print("joinConditionsData : ", table_joining_keys)
-    print("joinedColumnsData : ", table_join_conditions)
+
+    final_df = pd.DataFrame()
+
+    element, values = next(iter(table_column.items()))
+    element_name, element_type = BifervateElement(element)
+    print(element_name, " : ",element_type )
+    # joining columns for the current column
+    joining_keys_for_element = table_joining_keys[element]
+    # getting all the required columns : (columns requested by the user UNION columns required for joining)
+    values = list(set(values).union(set(joining_keys_for_element)))
+
+    if element_type == 'relational':
+        final_df = GetRelationalDataAsDataFrame(databasename,element_name,values)
+    elif element_type == 'excel':
+        final_df = GetExcelDataAsDataFrame(excel_filepath,element_name,values)
+    elif element_type == 'JSON':
+        final_df = GetJSONDataAsDataFrame(json_filepath,values)
+    elif element_type == 'XML':
+        final_df = GetXMLDataAsDataFrame(xml_filepath,values)
+
+    for i,(table_name,columns) in enumerate(table_column.items()):
+
+        if i == len(table_column)-1:
+            continue
+
+        joining_to = table_join_conditions[table_name]['join_table']
+
+        element_name,element_type = BifervateElement(joining_to)
+
+        values = list(set(table_column[joining_to]).union(table_join_conditions[table_name]['join_columns']))
+        joining_df = pd.DataFrame()
+
+        print(f"joining {table_name} to {joining_to} with {values}")
+        print(f"columns of final_df  : {i} ", final_df.columns)
+
+        # joining_from_columns_test = final_df.columns
+
+        if element_type == 'relational':
+            joining_df = GetRelationalDataAsDataFrame(databasename, element_name, values)
+        elif element_type == 'excel':
+            joining_df = GetExcelDataAsDataFrame(excel_filepath, element_name, values)
+        elif element_type == 'JSON':
+            joining_df = GetJSONDataAsDataFrame(json_filepath, values)
+        elif element_type == 'XML':
+            joining_df = GetXMLDataAsDataFrame(xml_filepath, values)
+
+        # print(joining_df)
+        joining_from_columns = table_joining_keys[table_name]
+        joining_to_columns = table_join_conditions[table_name]['join_columns']
 
 
+        print(table_name , " left : ", joining_from_columns, f" {len(joining_from_columns)}")
+        print(table_join_conditions[table_name]['join_table']," right : ",joining_to_columns,f" {len(joining_to_columns)}")
 
-    return "joining data got successfully!"
+        # logic for preventing any wrong comparisons due to renaming using _delme
+
+        # values list elements elements occuring in from df will get renamed hence un-renamed already existing may get
+        # compared in the next join
+
+        # common_from_to = list(set(values) & set(joining_from_columns_test))
+
+        # hence renaming in the table_joining_keys for ensuring correct join next time too
+
+        # for common_item in common_from_to:
+        #     if common_item in table_joining_keys[joining_to]:
+        #         i = table_joining_keys[joining_to].index(common_item)
+        #         table_joining_keys[joining_to][i] = common_item + '_delme'
+
+        final_df = final_df.merge(
+            joining_df,
+            left_on=joining_from_columns,
+            right_on=joining_to_columns,
+            how='inner',
+            suffixes=('', '_delme')
+        )
+        print(final_df)
+
+    print(final_df)
+
+    return "data for joining fetched successfully!"
 
 @app.route('/check_database', methods=['POST'])
 def check_db_existence():
@@ -751,7 +1056,7 @@ def afterON(table1,table2,join1,join2):
 
 def DataRetriver(database,query_index,table_joining_conditions,joining_keys):
     rows = []
-    cassandra_query = f"select db_config from relationalmetadata where databasename='{database}'"
+    cassandra_query = f"select db_config from relationalmetadata where databasename='{database}' limit 1"
     result = session.execute(cassandra_query)[0]
     db_config = {
         "host": f"{result.db_config.host}",

@@ -545,6 +545,7 @@ def DataJoiner():
         element_name,element_type = BifervateElement(joining_to)
 
         values = list(set(table_column[joining_to]).union(table_join_conditions[table_name]['join_columns']))
+        values = list(set(values).union(table_joining_keys[joining_to]))
         joining_df = pd.DataFrame()
 
         print(f"joining {table_name} to {joining_to} with {values}")
@@ -579,10 +580,10 @@ def DataJoiner():
         # hence renaming in the table_joining_keys for ensuring correct join next time too
 
         for common_item in common_from_to:
-            if common_item in table_joining_keys[joining_to]:
+            if common_item in table_joining_keys[joining_to] and common_item not in table_join_conditions[table_name]['join_columns']:
                 i = table_joining_keys[joining_to].index(common_item)
                 table_joining_keys[joining_to][i] = common_item + '_delme'
-            if common_item in table_column[joining_to]:
+            if common_item in table_column[joining_to] and common_item not in table_join_conditions[table_name]['join_columns']:
                 i = table_column[joining_to].index(common_item)
                 table_column[joining_to][i] = common_item + '_delme'
 
@@ -596,9 +597,14 @@ def DataJoiner():
             suffixes=('', '_delme')
         )
         columns_required = columns_required + table_column[joining_to]
-        print(final_df)
 
-    print(final_df[columns_required])
+
+    print("Complete data Frame : \n",final_df)
+    print("Trimmed data Frame : \n",final_df[columns_required])
+    final_df[columns_required].to_csv("C:\\Users\\Dell\\Desktop\\generated_test_data\\data.csv", header=True, index=False)
+
+    # final_df[columns_required] :  all the data
+    # columns_required : required_columns
 
     return "data for joining fetched successfully!"
 

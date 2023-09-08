@@ -519,6 +519,7 @@ def DataJoiner():
 
     element, values = next(iter(table_column.items()))
     element_name, element_type = BifervateElement(element)
+    columns_required = values
     print(element_name, " : ",element_type )
     # joining columns for the current column
     joining_keys_for_element = table_joining_keys[element]
@@ -549,7 +550,7 @@ def DataJoiner():
         print(f"joining {table_name} to {joining_to} with {values}")
         print(f"columns of final_df  : {i} ", final_df.columns)
 
-        # joining_from_columns_test = final_df.columns
+        joining_from_columns_test = final_df.columns
 
         if element_type == 'relational':
             joining_df = GetRelationalDataAsDataFrame(databasename, element_name, values)
@@ -573,15 +574,20 @@ def DataJoiner():
         # values list elements elements occuring in from df will get renamed hence un-renamed already existing may get
         # compared in the next join
 
-        # common_from_to = list(set(values) & set(joining_from_columns_test))
+        common_from_to = list(set(values) & set(joining_from_columns_test))
 
         # hence renaming in the table_joining_keys for ensuring correct join next time too
 
-        # for common_item in common_from_to:
-        #     if common_item in table_joining_keys[joining_to]:
-        #         i = table_joining_keys[joining_to].index(common_item)
-        #         table_joining_keys[joining_to][i] = common_item + '_delme'
+        for common_item in common_from_to:
+            if common_item in table_joining_keys[joining_to]:
+                i = table_joining_keys[joining_to].index(common_item)
+                table_joining_keys[joining_to][i] = common_item + '_delme'
+            if common_item in table_column[joining_to]:
+                i = table_column[joining_to].index(common_item)
+                table_column[joining_to][i] = common_item + '_delme'
 
+
+        print("changed in joinnig_to whihch will be next joining from  : ", table_joining_keys[joining_to])
         final_df = final_df.merge(
             joining_df,
             left_on=joining_from_columns,
@@ -589,9 +595,10 @@ def DataJoiner():
             how='inner',
             suffixes=('', '_delme')
         )
+        columns_required = columns_required + table_column[joining_to]
         print(final_df)
 
-    print(final_df)
+    print(final_df[columns_required])
 
     return "data for joining fetched successfully!"
 

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add more Tables</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f7f7f7;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    h3 {
+        text-align: center;
+    }
+
+    .table-list .sheet-list{
+        list-style: none;
+        padding: 0;
+    }
+
+    .table-label .sheet-label {
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .submit-button {
+        display: block;
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .submit-button:hover {
+        background-color: #2980b9;
+    }
+</style>
+<body>
+    <form action="/addTableHandler" method="post" id="addTablesForm">
+        {% if table_data %}
+        <h3>Select Tables to Add</h3>
+        <ul class="table-list">
+            {% for table_name, columns in table_data.items() %}
+                <li>
+                    <label class="table-label">
+                        <input type="checkbox" name="selected_tables[]" value="{{ table_name }}">
+                        {{ table_name }}
+                    </label>
+                    <select name="primary_key_{{ table_name }}">
+                        <option value="">Select primary Key</option>
+                        {% for column in columns %}
+                            <option value="{{ column }}">{{ column }}</option>
+                        {% endfor %}
+                    </select>
+                </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if excel_data %}
+        <h3>Select Worksheet to Add for {{ excel_filename }}</h3>
+        <ul class="sheet-list">
+            {% for sheetname, columns in excel_data.items() %}
+                <li>
+                    <label class="table-label">
+                        <input type="checkbox" name="selected_sheets[]" value="{{ sheetname }}">
+                        {{ sheetname }}
+                    </label>
+                    <select name="primary_key_{{ sheetname }}">
+                        <option value="">Select primary Key</option>
+                        {% for column in columns %}
+                            <option value="{{ column }}">{{ column }}</option>
+                        {% endfor %}
+                    </select>
+                </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if json_columns %}
+        <div class="json_pk">
+           <h3>Select Primary key for {{ json_filename }}</h3>
+            <h4>{{ json_filename }}</h4>
+                <select name="json_primary_key">
+                    <option value="">Select primary Key</option>
+                    {% for column in json_columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
+        </div>
+        {% endif %}
+        {% if xml_columns %}
+        <div class="xml_pk">
+            <h3>Select Primary key for {{ xml_filename }}</h3>
+            <h4>{{ xml_filename }}</h4>
+                <select name="xml_primary_key">
+                    <option value="">Select primary Key</option>
+                    {% for column in xml_columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
+        </div>
+        {% endif %}
+<!--   hidden information  : hide somewhere like useconstext() in react   -->
+        <input type="hidden" id="db_name" name="db_name" value="{{ db_name }}">
+        <input type="hidden" id="host" name="host" value="{{ host }}">
+        <input type="hidden" id="user" name="user" value="{{ user }}">
+        <input type="hidden" id="password" name="password" value="{{ password }}">
+<!--   hidden information    -->
+        <input type="hidden" id="selected_primary_keys_forTables" name="selected_primary_keys_forTables" value="">
+        <input type="hidden" id="selected_primary_keys_forSheets" name="selected_primary_keys_forSheets" value="">
+        <input type="hidden" id="selected_primary_keys_forJSON" name="selected_primary_keys_forJSON" value="">
+        <input type="hidden" id="selected_primary_keys_forXML" name="selected_primary_keys_forXML" value="">
+        <input type="hidden" id="json_filepath" name="json_filepath" value="{{ json_filepath }}">
+        <input type="hidden" id="excel_filepath" name="excel_filepath" value="{{ excel_filepath }}">
+        <input type="hidden" id="xml_filepath" name="xml_filepath" value="{{ xml_filepath }}">
+
+        <button type="button" id="submitButton" class="submit-button">Add Selected Tables</button>
+    </form>
+
+</body>
+
+<script>
+        $(document).ready(function() {
+            $("#submitButton").click(function() {
+                var selectedPrimaryKeysForTables = {};
+                $("ul.table-list li").each(function() {
+                    var table_name = $(this).find("input[type='checkbox']").val();
+                    var primary_key = $(this).find("select").val();
+
+                    if (table_name && primary_key) {
+                        selectedPrimaryKeysForTables[table_name] = primary_key;
+                    }
+                });
+                var selectedPrimaryKeysForSheets = {}
+                $("ul.sheet-list li").each(function() {
+                    var sheet_name = $(this).find("input[type='checkbox']").val();
+                    var primary_key = $(this).find("select").val();
+
+                    if (sheet_name && primary_key) {
+                        selectedPrimaryKeysForSheets[sheet_name] = primary_key;
+                    }
+                });
+                $("#selected_primary_keys_forTables").val(JSON.stringify(selectedPrimaryKeysForTables));
+                $("#selected_primary_keys_forSheets").val(JSON.stringify(selectedPrimaryKeysForSheets));
+                $("#addTablesForm").submit();
+            });
+            var jsonPrimaryKeyDict = {};
+                $("select[name='json_primary_key']").change(function() {
+                    var selectedPrimaryKey = $(this).val(); // Get the selected primary key
+                    var jsonFilename = "{{ json_filename }}"; // Get the JSON filename
+
+                    // Create a dictionary with the selected primary key for JSON
+
+                    jsonPrimaryKeyDict[jsonFilename] = selectedPrimaryKey;
+                    $("#selected_primary_keys_forJSON").val(JSON.stringify(jsonPrimaryKeyDict));
+                    console.log(jsonPrimaryKeyDict)
+                });
+                var xmlPrimaryKeyDict = {};
+                // When the XML select element changes
+                $("select[name='xml_primary_key']").change(function() {
+                    var selectedPrimaryKey = $(this).val(); // Get the selected primary key
+                    var xmlFilename = "{{ xml_filename }}"; // Get the XML filename
+
+                    // Create a dictionary with the selected primary key for XML
+
+                    xmlPrimaryKeyDict[xmlFilename] = selectedPrimaryKey;
+                    $("#selected_primary_keys_forXML").val(JSON.stringify(xmlPrimaryKeyDict));
+                    console.log(xmlPrimaryKeyDict)
+                });
+        });
+    </script>
+</html>
+
+
+
+

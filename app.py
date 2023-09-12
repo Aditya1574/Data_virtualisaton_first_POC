@@ -263,6 +263,7 @@ def collected_data_processing():
     # print(excel_file, " : ", excel_present)
 
     # True : present in cassandra or not selected for report generation
+
     if relational_present and xml_present and json_present and excel_present:
         final_tables = dict()
         excel_filepath = ""
@@ -295,7 +296,7 @@ def collected_data_processing():
             cassandra_query = f"select datafield from xmlmetadata where filename='{xml_file}'"
             result = session.execute(cassandra_query)[0]
             final_tables[xml_file + ":XML"] = result.datafield
-            cassandra_query = f"select filepath from xmlmetadata where filename='{excel_file}' limit 1"
+            cassandra_query = f"select filepath from xmlmetadata where filename='{xml_file}' limit 1"
             result = session.execute(cassandra_query)[0]
             xml_filepath = result.filepath
 
@@ -305,111 +306,6 @@ def collected_data_processing():
     return render_template('data_entry.html',databasename=db_name,xml_filename=xml_file,excel_filename=excel_file,
                            json_filename=json_file,relational_present=relational_present,xml_present=xml_present,
                            json_present=json_present,excel_present=excel_present)
-    # make a conditional statement for rendering some other page to get to the main menu if all entered are already present
-
-    # relational_data = dict()
-    # json_data = dict()
-    # xml_data = dict()
-    # excel_data = dict()
-    #
-    # if request.form.get('relational-data'):
-    #     relational_data = json.loads(request.form.get('relational-data'))
-    #     print(relational_data)
-    # if request.form.get('json-data'):
-    #     json_data = json.loads(request.form.get('json-data'))
-    # if request.form.get('xml-data'):
-    #     xml_data = json.loads(request.form.get('xml-data'))
-    # if request.form.get('excel-data'):
-    #     excel_data = json.loads(request.form.get('excel-data'))
-    #     print(excel_data)
-    #
-    # table_names_send = []
-    # relational_present = False
-    # databasename=""
-    # if relational_data:
-    #
-    #     db_config={
-    #         "host": relational_data['hostname'],
-    #         "user": relational_data['user'],
-    #         "password": relational_data['password'],
-    #         "database": relational_data['database']
-    #     }
-    #     databasename=relational_data['database']
-    #     # Connect to the MySQL database
-    #     # right now fetching from sql server will fetch from cassandra
-    #     connection = mysql.connector.connect(**db_config)
-    #     cursor = connection.cursor()
-    #
-    #     # Replace with the desired table name
-    #     query = "SHOW TABLES"
-    #
-    #     # Execute the query
-    #     cursor.execute(query)
-    #
-    #     # Fetch the table names
-    #     tables = cursor.fetchall()
-    #
-    #     # Extract table names from the fetched data
-    #     table_names_send = [table[0] for table in tables]
-    #     relational_present = True
-    #
-    #     # print(table_names_send)
-    #
-    #     cursor.close()
-    #     connection.close()
-    #
-    # excel_present = False
-    # sheet_names_send = []
-    # excel_filepath = ""
-    # if excel_data:
-    #     # Replace 'your_file.xlsx' with the path to your Excel file
-    #     excel_filepath = excel_data['excel_filepath']
-    #
-    #     # Using ExcelFile object
-    #     xls = pd.ExcelFile(excel_filepath)
-    #     sheet_names = xls.sheet_names
-    #
-    #     # Using pd.read_excel
-    #     sheet_names_send = pd.ExcelFile(excel_filepath).sheet_names
-    #     excel_present = True
-    #
-    #     # print(sheet_names_send)
-    #
-    # json_present = False
-    # json_filename = ""
-    # json_filepath = ""
-    # if json_data:
-    #     json_filepath = json_data['json_filepath']
-    #     json_filename = get_filename(json_filepath)
-    #     json_present = True
-    #     # print(json_filename)
-    #
-    # xml_present = False
-    # xml_filename = ""
-    # xml_filepath = ""
-    # if xml_data:
-    #     xml_filepath = xml_data['xml_filepath']
-    #     xml_filename = get_filename(xml_filepath)
-    #     xml_present = True
-    #     # print(xml_filename)
-    #
-    # selected_tables_list = []
-    #
-    # if relational_present:
-    #     for table_name in table_names_send:
-    #         selected_tables_list.append(table_name + ":relational")
-    # if excel_present:
-    #     for sheet_name in sheet_names_send:
-    #         selected_tables_list.append(sheet_name + ":excel")
-    # if xml_present:
-    #     selected_tables_list.append(xml_filename + ":XML")
-    # if json_present:
-    #     selected_tables_list.append(json_filename + ":JSON")
-    #
-    #
-    #
-    # return render_template('view_selection.html',tables=selected_tables_list,databasename=databasename,
-    #                        excel_filepath=excel_filepath,json_filepath=json_filepath,xml_filepath=xml_filepath)
 
 @app.route('/final_data_collected', methods=['POST'])
 def send_to_tableSelection():
@@ -509,12 +405,11 @@ def send_to_tableSelection():
         for sheet_name in sheet_names:
             excel_query_index[sheet_name] = GetColumnNamesFromSheetName(excel_filepath,sheet_name)
     elif excel_filename != "None":
-        # not required
-        # cassandra_query = f"select sheetname,datafields from excelmetadata where filename='{excel_filename}'"
-        # result = session.execute(cassandra_query)
-        # for element in result:
-        #     excel_query_index[element.sheetname] = element.datafields
-        pass
+        # required for getting the path of the corrosponding file which is existing in cassandra and send it from here on!
+        cassandra_query = f"select filepath from excelmetadata where filename='{excel_filename}' limit 1"
+        result = session.execute(cassandra_query)[0]
+        excel_filepath = result.filepath
+
 
     if xml_present is not None:
         xml_data = json.loads(request.form.get('xml-data'))
@@ -522,10 +417,10 @@ def send_to_tableSelection():
         xml_filename = get_filename(xml_filepath)
         xml_columns = GetXMLFlattenAttrNames(xml_filepath)
     elif xml_filename != "None":
-        # cassandra_query = f"select datafield from xmlmetadata where filename='{xml_filename}'"
-        # result = session.execute(cassandra_query)[0]
-        # xml_columns = result.datafield
-        pass
+        cassandra_query = f"select filepath from xmlmetadata where filename='{xml_filename}' limit 1"
+        result = session.execute(cassandra_query)[0]
+        xml_filepath = result.filepath
+
 
     if json_present is not None:
         json_data = json.loads(request.form.get('json-data'))
@@ -533,10 +428,10 @@ def send_to_tableSelection():
         json_filename = get_filename(json_filepath)
         json_columns = [key for key in GetJSONFlattenAttrNames(json_filepath)]
     elif json_filename != "None":
-        # cassandra_query = f"select datafields from jsonmetadata where filename='{json_filename}'"
-        # result = session.execute(cassandra_query)[0]
-        # json_columns = result.datafields
-        pass
+        cassandra_query = f"select filepath from jsonmetadata where filename='{json_filename}' limit 1"
+        result = session.execute(cassandra_query)[0]
+        json_filepath = result.filepath
+
 
 
     return render_template('add_tables_sheets.html',
@@ -816,9 +711,21 @@ def DataJoiner():
         joining_from_columns = table_joining_keys[table_name]
         joining_to_columns = table_join_conditions[table_name]['join_columns']
 
+        print("Dislaying data types of from : \n")
+        for col in joining_from_columns:
+            print(col, " : " , final_df[col].dtype)
+
+        print("Dislaying data types of to : \n")
+        for col in joining_to_columns:
+            print(col, " : ", joining_df[col].dtype)
+
 
         print(table_name , " left : ", joining_from_columns, f" {len(joining_from_columns)}")
         print(table_join_conditions[table_name]['join_table']," right : ",joining_to_columns,f" {len(joining_to_columns)}")
+
+
+        for index in range(len(joining_to_columns)):
+            joining_df[joining_to_columns[index]] = joining_df[joining_to_columns[index]].astype(final_df[joining_from_columns[index]].dtype)
 
         # logic for preventing any wrong comparisons due to renaming using _delme
 
@@ -1188,13 +1095,15 @@ def collect_tables():
 @app.route('/addTableHandler',methods=['POST'])
 def SaveAddedtableMetaData():
     # SAVING METADATA FOR RELATIONAL DATABASE
-    db_name = ""
-    excel_filepath = ""
-    json_filepath = ""
-    xml_filepath = ""
+    db_name = request.form.get('db_name')
+    excel_filepath = request.form.get('excel_filepath')
+    json_filepath = request.form.get('json_filepath')
+    xml_filepath = request.form.get('xml_filepath')
     final_tables = dict()
     # print("Relational : ", request.form.get('selected_primary_keys_forTables'), bool(json.loads(request.form.get('selected_primary_keys_forTables'))))
-    if request.form.get('selected_primary_keys_forTables') != "{}":
+    print("databasename : " , db_name, " ", type(db_name))
+
+    if request.form.get('selected_primary_keys_forTables') != "{}" and request.form.get('selected_primary_keys_forTables') != "":
         tables_primary_keys = json.loads(request.form.get('selected_primary_keys_forTables'))
         db_name = request.form.get('db_name')
         db_config = {
@@ -1222,7 +1131,8 @@ def SaveAddedtableMetaData():
                 column_names = [f"'{column[0]}'" for column in columns]
                 column_names_string = ','.join(map(str, column_names))
 
-                cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename,db_config,datafields) values(" \
+                cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename," \
+                                  f"db_config,datafields) values(" \
                                   f"'{db_name}'," \
                                   f"'{primary_key}'," \
                                   f"'{table_name}'," \
@@ -1233,9 +1143,16 @@ def SaveAddedtableMetaData():
                 session.execute(cassandra_query)
             except mysql.connector.Error as err:
                 print("Error:", err)
+    elif db_name != "None"and db_name != "": # means this exists in the meta data repo
+        cassandra_query = f"select tablename,datafields from relationalmetadata where databasename='{db_name}'"
+        result = session.execute(cassandra_query)
+        for element in result:
+            final_tables[element.tablename + ":relational"] = element.datafields
 
     print("Excel : ", request.form.get('selected_primary_keys_forSheets'))
-    if request.form.get('selected_primary_keys_forSheets') != "{}":
+    print("excel_filepath : " , excel_filepath, " ", type(excel_filepath))
+
+    if request.form.get('selected_primary_keys_forSheets') != "{}" and request.form.get('selected_primary_keys_forSheets') != "":
         sheet_primary_keys = json.loads(request.form.get('selected_primary_keys_forSheets'))
         excel_filepath = request.form.get('excel_filepath')
         excel_filename = get_filename(excel_filepath)
@@ -1253,9 +1170,17 @@ def SaveAddedtableMetaData():
                               f"'{primary_key}')"
             session.execute(cassandra_query)
             print(cassandra_query, "\n", "Saved excel metadata to cassandra using the abobe query \n")
+    elif excel_filepath != "None" and excel_filepath != "":
+        excel_file = get_filename(excel_filepath)
+        cassandra_query = f"select sheetname,datafields from excelmetadata where filename='{excel_file}'"
+        result = session.execute(cassandra_query)
+        for element in result:
+            final_tables[element.sheetname + ":excel"] = element.datafields
 
     print("JSON : ", request.form.get('selected_primary_keys_forJSON'))
-    if request.form.get('selected_primary_keys_forJSON') != "{}":
+    print("json_filepath : " , json_filepath, " ", type(json_filepath))
+
+    if request.form.get('selected_primary_keys_forJSON') != "{}" and request.form.get('selected_primary_keys_forJSON') != "":
         json_filepath = request.form.get('json_filepath')
         filename_pk = json.loads(request.form.get('selected_primary_keys_forJSON'))
         filename, primary_key = next(iter(filename_pk.items()))
@@ -1270,9 +1195,16 @@ def SaveAddedtableMetaData():
                           f")"
         session.execute(cassandra_query)
         print(cassandra_query, "\n", "Saved JSON metadata to cassandra using the abobe query \n")
+    elif json_filepath != "None"and json_filepath != "":
+        json_file = get_filename(json_filepath)
+        cassandra_query = f"select datafields from jsonmetadata where filename='{json_file}'"
+        result = session.execute(cassandra_query)[0]
+        final_tables[json_file + ":JSON"] = result.datafields
 
     print("XML : ", request.form.get('selected_primary_keys_forXML'))
-    if request.form.get('selected_primary_keys_forXML') != "{}":
+    print("xml_filepath : " , xml_filepath, " ", type(xml_filepath))
+
+    if request.form.get('selected_primary_keys_forXML') != "{}" and request.form.get('selected_primary_keys_forXML') != "":
         xml_filepath = request.form.get('xml_filepath')
         filename_pk = json.loads(request.form.get('selected_primary_keys_forXML'))
         filename, primary_key = next(iter(filename_pk.items()))
@@ -1287,8 +1219,13 @@ def SaveAddedtableMetaData():
                           f")"
         session.execute(cassandra_query)
         print(cassandra_query, "\n", "Saved XML metadata to cassandra using the abobe query \n")
-
+    elif xml_filepath != "None" and xml_filepath != "":
+        xml_file = get_filename(xml_filepath)
+        cassandra_query = f"select datafield from xmlmetadata where filename='{xml_file}'"
+        result = session.execute(cassandra_query)[0]
+        final_tables[xml_file + ":XML"] = result.datafield
     # return "Saved data into meta data repo successfully!"
+
     return render_template('view_selection.html',tables=final_tables,databasename=db_name,json_filepath=json_filepath,
                            xml_filepath=xml_filepath,excel_filepath=excel_filepath)
     # return render_template('options.html', databasename=db_name)

@@ -123,6 +123,18 @@ select {
                 </li>
             {% endfor %}
         </ul>
+        {% for sheetname, columns in excel_data.items() %}
+        <h3>Select Custom Names for {{ sheetname }} Columns</h3>
+        <ul class="custom-names-list">
+            {% for column in columns %}
+            <li>
+                <label for="custom_name_excel_{{ sheetname }}_{{ column }}">{{ column }}</label>
+                <input type="text" id="custom_name_excel_{{ sheetname }}_{{ column }}" name="custom_name_excel_{{ sheetname }}_{{ column }}" value="{{column}}" >
+            </li>
+            {% endfor %}
+        </ul>
+        <input type="hidden" name="custom_names_excel_{{ sheetname }}" id="custom_names_excel_{{ sheetname }}" value="">
+        {% endfor %}
         {% endif %}
         {% if json_columns %}
         <div class="json_pk">
@@ -134,6 +146,16 @@ select {
                         <option value="{{ column }}">{{ column }}</option>
                     {% endfor %}
                 </select>
+            <h3>Select Custom Names for JSON Columns</h3>
+            <ul class="custom-names-list">
+                {% for column in json_columns %}
+                <li>
+                    <label for="custom_name_json_{{ column }}">{{ column }}</label>
+                    <input type="text" id="custom_name_json_{{ column }}" name="custom_name_json_{{ column }}" value="{{column}}">
+                </li>
+                {% endfor %}
+            </ul>
+            <input type="hidden" name="custom_names_json" id="custom_names_json" value="">
         </div>
         {% endif %}
         {% if xml_columns %}
@@ -146,6 +168,16 @@ select {
                         <option value="{{ column }}">{{ column }}</option>
                     {% endfor %}
                 </select>
+            <h3>Select Custom Names for XML Columns</h3>
+            <ul class="custom-names-list">
+                {% for column in xml_columns %}
+                <li>
+                    <label for="custom_name_xml_{{ column }}">{{ column }}</label>
+                    <input type="text" id="custom_name_xml_{{ column }}" name="custom_name_xml_{{ column }}" value="{{column}}">
+                </li>
+                {% endfor %}
+            </ul>
+            <input type="hidden" name="custom_names_xml" id="custom_names_xml" value="">
         </div>
         {% endif %}
 <!--   hidden information  : hide somewhere like useconstext() in react   -->
@@ -217,7 +249,40 @@ select {
                     $("#selected_primary_keys_forXML").val(JSON.stringify(xmlPrimaryKeyDict));
                     console.log(xmlPrimaryKeyDict)
                 });
-        });
+                // Excel Worksheet Columns
+                {% for sheetname, columns in excel_data.items() %}
+                $('input[name^="custom_name_excel_{{ sheetname }}"]').on('input', function() {
+                    var customNames = {};
+                    $('input[name^="custom_name_excel_{{ sheetname }}"]').each(function() {
+                        var columnName = $(this).attr('name').replace('custom_name_excel_{{ sheetname }}_', '');
+                        var customName = $(this).val();
+                        customNames[columnName] = customName;
+                    });
+                    $('#custom_names_excel_{{ sheetname }}').val(JSON.stringify(customNames));
+                });
+                {% endfor %}
+                // JSON Columns
+                $('input[name^="custom_name_json_"]').on('input', function() {
+                    var customNames = {};
+                    $('input[name^="custom_name_json_"]').each(function() {
+                        var columnName = $(this).attr('name').replace('custom_name_json_', '');
+                        var customName = $(this).val();
+                        customNames[columnName] = customName;
+                    });
+                    $('#custom_names_json').val(JSON.stringify(customNames));
+                });
+
+                // XML Columns
+                $('input[name^="custom_name_xml_"]').on('input', function() {
+                    var customNames = {};
+                    $('input[name^="custom_name_xml_"]').each(function() {
+                        var columnName = $(this).attr('name').replace('custom_name_xml_', '');
+                        var customName = $(this).val();
+                        customNames[columnName] = customName;
+                    });
+                    $('#custom_names_xml').val(JSON.stringify(customNames));
+                });
+            });
     </script>
 </html>
 

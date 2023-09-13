@@ -189,7 +189,6 @@ def check_relationaldatabase(databasename):
 
 
 def check_exceldatabase(filename):
-
     query = "select filename from excelmetadata group by filename"
     result = session.execute(query)
     for row in result:
@@ -255,47 +254,34 @@ def collected_data_processing():
         if not excel_present:
             excel_file = ""
 
-
-    # just Debegging statements
-    # print(db_name, " : ", relational_present)
-    # print(xml_file, " : ", xml_present)
-    # print(json_file, " : ", json_present)
-    # print(excel_file, " : ", excel_present)
-
-    # True : present in cassandra or not selected for report generation
-
     if relational_present and xml_present and json_present and excel_present:
-        final_tables = dict()
+        final_tables = []
         excel_filepath = ""
         xml_filepath = ""
         json_filepath = ""
         if db_name: # checking if the name was entered
-            cassandra_query = f"select tablename,datafields from relationalmetadata where databasename='{db_name}'"
+            cassandra_query = f"select tablename from relationalmetadata where databasename='{db_name}'"
             result = session.execute(cassandra_query)
             for element in result:
-                final_tables[element.tablename + ":relational" ] = element.datafields
+                final_tables.append(element.tablename + ":relational")
 
         if excel_file:
-            cassandra_query = f"select sheetname,datafields from excelmetadata where filename='{excel_file}'"
+            cassandra_query = f"select sheetname from excelmetadata where filename='{excel_file}'"
             result = session.execute(cassandra_query)
             for element in result:
-                final_tables[element.sheetname + ":excel"] = element.datafields
+                final_tables.append(element.sheetname + ":excel")
             cassandra_query = f"select filepath from excelmetadata where filename='{excel_file}' limit 1"
             result = session.execute(cassandra_query)[0]
             excel_filepath = result.filepath
 
         if json_file:
-            cassandra_query = f"select datafields from jsonmetadata where filename='{json_file}'"
-            result = session.execute(cassandra_query)[0]
-            final_tables[json_file + ":JSON"] = result.datafields
+            final_tables.append(json_file + ":JSON")
             cassandra_query = f"select filepath from jsonmetadata where filename='{json_file}' limit 1"
             result = session.execute(cassandra_query)[0]
             json_filepath = result.filepath
 
         if xml_file:
-            cassandra_query = f"select datafield from xmlmetadata where filename='{xml_file}'"
-            result = session.execute(cassandra_query)[0]
-            final_tables[xml_file + ":XML"] = result.datafield
+            final_tables.append(xml_file + ":XML")
             cassandra_query = f"select filepath from xmlmetadata where filename='{xml_file}' limit 1"
             result = session.execute(cassandra_query)[0]
             xml_filepath = result.filepath
@@ -344,7 +330,7 @@ def send_to_tableSelection():
     print("xml_filename : ", xml_filename, " ", type(xml_filename))
     xml_columns = []
 
-    if relational_present is not None: # if the data for this was entered >> was chosen but not in meta
+    if relational_present is not None: # if the data for this was entered >> was chosen but not in meta >> take the metadata to display using the datasource
         relational_data = json.loads(request.form.get('relational-data'))
         db_config={
             "host": relational_data['hostname'],
@@ -393,17 +379,16 @@ def send_to_tableSelection():
         databasename = result.db_config.database
 
     if excel_present is not None:
-        # Replace 'your_file.xlsx' with the path to your Excel file
         excel_data = json.loads(request.form.get('excel-data'))
         excel_filepath = excel_data['excel_filepath']
         excel_filename = get_filename(excel_filepath)
         # Using ExcelFile object
         xls = pd.ExcelFile(excel_filepath)
         sheet_names = xls.sheet_names
-        # Using pd.read_excel
-        sheet_names = pd.ExcelFile(excel_filepath).sheet_names
         for sheet_name in sheet_names:
-            excel_query_index[sheet_name] = GetColumnNamesFromSheetName(excel_filepath,sheet_name)
+            df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
+            excel_query_index[sheet_name] = df.columns.tolist()
+
     elif excel_filename != "None":
         # required for getting the path of the corrosponding file which is existing in cassandra and send it from here on!
         cassandra_query = f"select filepath from excelmetadata where filename='{excel_filename}' limit 1"
@@ -415,7 +400,7 @@ def send_to_tableSelection():
         xml_data = json.loads(request.form.get('xml-data'))
         xml_filepath = xml_data['xml_filepath']
         xml_filename = get_filename(xml_filepath)
-        xml_columns = GetXMLFlattenAttrNames(xml_filepath)
+        xml_columns = GetXMLFlattenAttrNamesFromSource(xml_filepath)
     elif xml_filename != "None":
         cassandra_query = f"select filepath from xmlmetadata where filename='{xml_filename}' limit 1"
         result = session.execute(cassandra_query)[0]
@@ -426,7 +411,7 @@ def send_to_tableSelection():
         json_data = json.loads(request.form.get('json-data'))
         json_filepath = json_data['json_filepath']
         json_filename = get_filename(json_filepath)
-        json_columns = [key for key in GetJSONFlattenAttrNames(json_filepath)]
+        json_columns = [key for key in GetJSONFlattenAttrNamesFromSource(json_filepath)]
     elif json_filename != "None":
         cassandra_query = f"select filepath from jsonmetadata where filename='{json_filename}' limit 1"
         result = session.execute(cassandra_query)[0]
@@ -443,43 +428,42 @@ def send_to_tableSelection():
 
 
 
-def GetColumnNames(databasename,table_name):
-    cassandra_query = f"select db_config from relationalmetadata where databasename='{databasename}' limit 1"
+def GetColumnNamesFromMeta(databasename,table_name):
+    cassandra_query = f"select datafields from relationalmetadata where databasename='{databasename}' and tablename='{table_name}'"
     result = session.execute(cassandra_query)[0]
-    print(result)
-    db_config = {
-        "host": f"{result.db_config.host}",
-        "user": f"{result.db_config.user}",
-        "password": f"{result.db_config.password}",
-        "database": f"{result.db_config.database}"
-    }
+    return result.datafields
 
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
+def GetColumnNamesFromSheetNameFromMeta(excel_filepath,sheet_name):
+    excel_filename = get_filename(excel_filepath)
+    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and sheetname='{sheet_name}';"
+    result = session.execute(query)[0]
     column_names = []
-    try:
-        query = f"SHOW COLUMNS FROM {table_name}"
-
-        cursor.execute(query)
-
-        # Fetch the column information
-        columns = cursor.fetchall()
-
-        column_names = [column[0] for column in columns]
-    except mysql.connector.Error as err:
-        print("Error:", err)
-
+    for key,value in result.datafieldmapper.items():
+        column_names.append(value)
     return column_names
 
-def GetColumnNamesFromSheetName(excel_filepath,sheet_name):
-    df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
 
-    # Get the column names as a list
-    column_names = df.columns.tolist()
+def GetXMLFlattenAttrNamesFromMeta(xml_filepath):
+    xml_filename = get_filename(xml_filepath)
+    query = f"select datafieldmapper from xmlmetadata where filename='{xml_filename}';"
+    result = session.execute(query)[0]
+    AttrNames = []
+    for key,value in result.datafieldmapper.items():
+        AttrNames.append(value)
 
-    return column_names
+    return AttrNames
 
-def GetXMLFlattenAttrNames(xml_filepath):
+def GetJSONFlattenAttrNamesFromMeta(json_filepath):
+    json_filename = get_filename(json_filepath)
+    query = f"select datafieldmapper from jsonmetadata where filename='{json_filename}';"
+    result = session.execute(query)[0]
+    AttrNames = []
+    for key,value in result.datafieldmapper.items():
+        AttrNames.append(value)
+
+    return AttrNames
+
+def GetXMLFlattenAttrNamesFromSource(xml_filepath):
     tree = ET.parse(xml_filepath)
     root = tree.getroot()
 
@@ -505,7 +489,7 @@ def GetXMLFlattenAttrNames(xml_filepath):
     flattened_data = []
     return flatten_xml(first_element,flattened_data)
 
-def GetJSONFlattenAttrNames(json_filepath):
+def GetJSONFlattenAttrNamesFromSource(json_filepath):
 
     with open(json_filepath, 'r') as file:
         data = json.load(file)
@@ -515,7 +499,46 @@ def GetJSONFlattenAttrNames(json_filepath):
 
     return JSONflatten_dict(first_object).keys()
 
+def ReverseDict(original_dict):
+    reversed_dict = {value: key for key, value in original_dict.items()}
 
+    return reversed_dict
+
+
+def ExcelCustomToOrignal(excel_filename,values,sheetname):
+    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and sheetname='{sheetname}';"
+    result = session.execute(query)[0]
+
+    customtoorignal = ReverseDict(result.datafieldmapper)
+
+    actual = []
+    for col in values:
+        actual.append(customtoorignal[col])
+
+    return actual
+
+
+def JSONCustomToOrignal(json_filename, values):
+    query = f"select datafieldmapper from jsonmetadata where filename='{json_filename}';"
+    result = session.execute(query)[0]
+    customtoorignal = ReverseDict(result.datafieldmapper)
+    actual = []
+    for col in values:
+        actual.append(customtoorignal[col])
+    return actual
+
+
+def XMLCustomToOrignal(xml_filename, values):
+    query = f"select datafieldmapper from xmlmetadata where filename='{xml_filename}';"
+    result = session.execute(query)[0]
+
+    customtoorignal = ReverseDict(result.datafieldmapper)
+
+    actual = []
+    for col in values:
+        actual.append(customtoorignal[col])
+
+    return actual
 
 @app.route('/data_selected',methods=['POST'])
 def generate_columns():
@@ -528,23 +551,21 @@ def generate_columns():
 
     # Looping through the selected_data thing getting table,sheets,json and xml files in order
     for element_name in selected_data:
-        start = element_name.rfind(':')
-        end = element_name.find(':')
-        db_type = element_name[start + 1:]
-        entity_name = element_name[:end]
+
+        entity_name,db_type = BifervateElement(element_name)
         # 1. relational database
+        # must get using cassandra
         if db_type == 'relational':
-            final_tables_data[element_name] = GetColumnNames(databasename,entity_name)
+            final_tables_data[element_name] = GetColumnNamesFromMeta(databasename,entity_name)
         # 2. excel database
         elif db_type == 'excel':
-            final_tables_data[element_name] = GetColumnNamesFromSheetName(excel_filepath,entity_name)
+            final_tables_data[element_name] = GetColumnNamesFromSheetNameFromMeta(excel_filepath,entity_name)
         # 3. json database
         elif db_type == 'JSON':
-            final_tables_data[element_name] = [key for key in GetJSONFlattenAttrNames(json_filepath)]
-            # doing this as what is returned from the function  is dict_key object
+            final_tables_data[element_name] = GetJSONFlattenAttrNamesFromMeta(json_filepath)
         # 4. xml database
         else:
-            final_tables_data[element_name] = GetXMLFlattenAttrNames(xml_filepath)
+            final_tables_data[element_name] = GetXMLFlattenAttrNamesFromMeta(xml_filepath)
 
     print(final_tables_data)
     return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename,
@@ -638,24 +659,89 @@ def GetExcelDataAsDataFrame(excel_filepath,sheet_name,colunms):
 def BifervateElement(element):
     start = element.rfind(':')
     end = element.find(':')
-
     return element[:end],element[start + 1:]
 
+def ConvertDICTCustomToOrignal(table_columns,excel_filename):
+    table_columns_orignal = dict()
+    for key,values in table_columns.items():
+        element_name,element_type = BifervateElement(key)
+        if element_type == 'relational':
+            table_columns_orignal[key] = values
+        elif element_type == 'excel':
+            table_columns_orignal[key] = ExcelCustomToOrignal(excel_filename,values,element_name)
+        elif element_type == 'JSON':
+            table_columns_orignal[key] = JSONCustomToOrignal(element_name,values)
+        elif element_type == 'XML':
+            table_columns_orignal[key] = XMLCustomToOrignal(element_name,values)
+    return table_columns_orignal
+
+def ConvertJoiningConditionsToOrignal(table_joining_conditions,excel_filename):
+    table_joining_conditions_orignal = dict()
+    print(table_joining_conditions)
+    for index,(key,value) in enumerate(table_joining_conditions.items()):
+        if index == len(table_joining_conditions)-1:
+            table_joining_conditions_orignal[key] = {'join_columns':[]}
+            continue
+        element = value['join_table']
+        element_name,element_type = BifervateElement(element)
+        if element_type == 'relational':
+            new_dict = dict()
+            new_values = value['join_columns']
+            new_dict['join_table'] = element
+            new_dict['join_columns'] = new_values
+            table_joining_conditions_orignal[key] = new_dict
+        elif element_type == 'excel':
+            new_dict = dict()
+            new_values = ExcelCustomToOrignal(excel_filename,value['join_columns'],element_name)
+            new_dict['join_table'] = element
+            new_dict['join_columns'] = new_values
+            table_joining_conditions_orignal[key] = new_dict
+        elif element_type == 'JSON':
+            new_dict = dict()
+            new_values = JSONCustomToOrignal(element_name, value['join_columns'])
+            new_dict['join_table'] = element
+            new_dict['join_columns'] = new_values
+            table_joining_conditions_orignal[key] = new_dict
+        elif element_type == 'XML':
+            new_dict = dict()
+            new_values = XMLCustomToOrignal(element_name, value['join_columns'])
+            new_dict['join_table'] = element
+            new_dict['join_columns'] = new_values
+            table_joining_conditions_orignal[key] = new_dict
+
+    return table_joining_conditions_orignal
 
 @app.route('/get_join_data', methods=['POST'])
 def DataJoiner():
     databasename = request.form.get('databasename')
+
     excel_filepath = request.form.get('excel_filepath')
+    excel_filename = get_filename(excel_filepath)
+
     json_filepath = request.form.get('json_filepath')
+    json_filename = get_filename(json_filepath)
+
     xml_filepath = request.form.get('xml_filepath')
+    xml_filename = get_filename(xml_filepath)
+
 
     table_column = json.loads(request.form.get('displayColumnsData'))
-    table_join_conditions = json.loads(request.form.get('joinConditionsData'))
-    table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
+    table_column_orignal = ConvertDICTCustomToOrignal(table_column,excel_filename)
 
-    print(table_column)
-    print(table_joining_keys)
-    print(table_join_conditions)
+    table_join_conditions = json.loads(request.form.get('joinConditionsData'))
+    table_join_conditions_orignal = ConvertJoiningConditionsToOrignal(table_join_conditions,excel_filename)
+
+    table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
+    table_joining_keys_orignal = ConvertDICTCustomToOrignal(table_joining_keys,excel_filename)
+
+    print("custom : ",table_column)
+    print("orignal : ",table_column_orignal)
+
+    print("custom  : ",table_joining_keys)
+    print("orignal : ",table_joining_keys_orignal)
+
+    print("custom : ",table_join_conditions)
+    print("orignal : ",table_join_conditions_orignal)
 
 
     print("inside /get_join_data : \n")
@@ -664,7 +750,9 @@ def DataJoiner():
 
     element, values = next(iter(table_column.items()))
     element_name, element_type = BifervateElement(element)
-    columns_required = values
+
+    ele_orignal,value_orignal = next(iter(table_column_orignal.items()))
+    columns_required = value_orignal
     print(element_name, " : ",element_type )
     # joining columns for the current column
     joining_keys_for_element = table_joining_keys[element]
@@ -674,10 +762,13 @@ def DataJoiner():
     if element_type == 'relational':
         final_df = GetRelationalDataAsDataFrame(databasename,element_name,values)
     elif element_type == 'excel':
+        values = ExcelCustomToOrignal(excel_filename,values,element_name)
         final_df = GetExcelDataAsDataFrame(excel_filepath,element_name,values)
     elif element_type == 'JSON':
+        values = JSONCustomToOrignal(json_filename,values)
         final_df = GetJSONDataAsDataFrame(json_filepath,values)
     elif element_type == 'XML':
+        values = XMLCustomToOrignal(xml_filename,values)
         final_df = GetXMLDataAsDataFrame(xml_filepath,values)
 
     for i,(table_name,columns) in enumerate(table_column.items()):
@@ -701,23 +792,31 @@ def DataJoiner():
         if element_type == 'relational':
             joining_df = GetRelationalDataAsDataFrame(databasename, element_name, values)
         elif element_type == 'excel':
+            excel_filename = get_filename(excel_filepath)
+            values = ExcelCustomToOrignal(excel_filename, values,element_name)
             joining_df = GetExcelDataAsDataFrame(excel_filepath, element_name, values)
         elif element_type == 'JSON':
+            json_filename = get_filename(json_filepath)
+            values = JSONCustomToOrignal(json_filename, values)
             joining_df = GetJSONDataAsDataFrame(json_filepath, values)
         elif element_type == 'XML':
+            xml_filename = get_filename(xml_filepath)
+            values = XMLCustomToOrignal(xml_filename, values)
             joining_df = GetXMLDataAsDataFrame(xml_filepath, values)
 
         # print(joining_df)
-        joining_from_columns = table_joining_keys[table_name]
-        joining_to_columns = table_join_conditions[table_name]['join_columns']
+        # change to table_joining_keys_orignal
+        joining_from_columns = table_joining_keys_orignal[table_name]
+        # change to table_join_conditions_orignal
+        joining_to_columns = table_join_conditions_orignal[table_name]['join_columns']
 
-        print("Dislaying data types of from : \n")
-        for col in joining_from_columns:
-            print(col, " : " , final_df[col].dtype)
-
-        print("Dislaying data types of to : \n")
-        for col in joining_to_columns:
-            print(col, " : ", joining_df[col].dtype)
+        # print("Dislaying data types of from : \n")
+        # for col in joining_from_columns:
+        #     print(col, " : " , final_df[col].dtype)
+        #
+        # print("Dislaying data types of to : \n")
+        # for col in joining_to_columns:
+        #     print(col, " : ", joining_df[col].dtype)
 
 
         print(table_name , " left : ", joining_from_columns, f" {len(joining_from_columns)}")
@@ -737,15 +836,16 @@ def DataJoiner():
         # hence renaming in the table_joining_keys for ensuring correct join next time too
 
         for common_item in common_from_to:
-            if common_item in table_joining_keys[joining_to] and common_item not in table_join_conditions[table_name]['join_columns']:
-                i = table_joining_keys[joining_to].index(common_item)
-                table_joining_keys[joining_to][i] = common_item + '_delme'
-            if common_item in table_column[joining_to] and common_item not in table_join_conditions[table_name]['join_columns']:
-                i = table_column[joining_to].index(common_item)
-                table_column[joining_to][i] = common_item + '_delme'
+            # change : table_joining_keys >> table_joining_keys_orignal, table_joining_conditions_orignal, table_column >> table_column_orignal
+            if common_item in table_joining_keys_orignal[joining_to] and common_item not in table_join_conditions_orignal[table_name]['join_columns']:
+                i = table_joining_keys_orignal[joining_to].index(common_item)
+                table_joining_keys_orignal[joining_to][i] = common_item + '_delme'
+            if common_item in table_column_orignal[joining_to] and common_item not in table_join_conditions_orignal[table_name]['join_columns']:
+                i = table_column_orignal[joining_to].index(common_item)
+                table_column_orignal[joining_to][i] = common_item + '_delme'
 
 
-        print("changed in joinnig_to whihch will be next joining from  : ", table_joining_keys[joining_to])
+        print("changed in joinnig_to whihch will be next joining from  : ", table_joining_keys_orignal[joining_to])
         final_df = final_df.merge(
             joining_df,
             left_on=joining_from_columns,
@@ -753,7 +853,8 @@ def DataJoiner():
             how='inner',
             suffixes=('', '_delme')
         )
-        columns_required = columns_required + table_column[joining_to]
+        # this is representing the custom names
+        columns_required = columns_required + table_column_orignal[joining_to]
 
 
     print("Complete data Frame : \n",final_df)
@@ -1099,7 +1200,7 @@ def SaveAddedtableMetaData():
     excel_filepath = request.form.get('excel_filepath')
     json_filepath = request.form.get('json_filepath')
     xml_filepath = request.form.get('xml_filepath')
-    final_tables = dict()
+    final_tables = []
     # print("Relational : ", request.form.get('selected_primary_keys_forTables'), bool(json.loads(request.form.get('selected_primary_keys_forTables'))))
     print("databasename : " , db_name, " ", type(db_name))
 
@@ -1127,7 +1228,7 @@ def SaveAddedtableMetaData():
                 # Fetch the column information
                 columns = cursor.fetchall()
                 # this goes up for being displayed in the front-end
-                final_tables[table_name + ":relational"] = columns
+                final_tables.append(table_name + ":relational")
                 column_names = [f"'{column[0]}'" for column in columns]
                 column_names_string = ','.join(map(str, column_names))
 
@@ -1143,11 +1244,11 @@ def SaveAddedtableMetaData():
                 session.execute(cassandra_query)
             except mysql.connector.Error as err:
                 print("Error:", err)
-    elif db_name != "None"and db_name != "": # means this exists in the meta data repo
-        cassandra_query = f"select tablename,datafields from relationalmetadata where databasename='{db_name}'"
+    elif db_name != "None" and db_name != "": # means this exists in the meta data repo
+        cassandra_query = f"select tablename from relationalmetadata where databasename='{db_name}'"
         result = session.execute(cassandra_query)
         for element in result:
-            final_tables[element.tablename + ":relational"] = element.datafields
+            final_tables.append(element.tablename + ":relational")
 
     print("Excel : ", request.form.get('selected_primary_keys_forSheets'))
     print("excel_filepath : " , excel_filepath, " ", type(excel_filepath))
@@ -1157,25 +1258,29 @@ def SaveAddedtableMetaData():
         excel_filepath = request.form.get('excel_filepath')
         excel_filename = get_filename(excel_filepath)
         for sheet_name,primary_key in sheet_primary_keys.items():
-            columns = GetColumnNamesFromSheetName(excel_filepath,sheet_name)
-            final_tables[sheet_name + ":excel"] = columns
-            column_names = [f"'{column}'" for column in columns]
-            column_names_string = ','.join(map(str,column_names))
-
-            cassandra_query = f"insert into excelmetadata(filename,sheetname,datafields,filepath,primary_key)" \
+            fetcher_id = f"custom_names_excel_{sheet_name}"
+            actual_custom = json.loads(request.form.get(fetcher_id))
+            datafieldmapper_string = ""
+            for index,(key,value) in enumerate(actual_custom.items()):
+                datafieldmapper_string += f"'{key}':'{value}'"
+                if index == len(actual_custom.items()) - 1:
+                    continue
+                datafieldmapper_string += ","
+            final_tables.append(sheet_name + ":excel")
+            cassandra_query = f"insert into excelmetadata(filename,sheetname,datafieldmapper,filepath,primary_key)" \
                               f"values('{excel_filename}'," \
                               f"'{sheet_name}'," \
-                              f"[{column_names_string}]," \
+                              "{" + f"{datafieldmapper_string}" + "}," \
                               f"'{excel_filepath}'," \
                               f"'{primary_key}')"
             session.execute(cassandra_query)
             print(cassandra_query, "\n", "Saved excel metadata to cassandra using the abobe query \n")
     elif excel_filepath != "None" and excel_filepath != "":
         excel_file = get_filename(excel_filepath)
-        cassandra_query = f"select sheetname,datafields from excelmetadata where filename='{excel_file}'"
+        cassandra_query = f"select sheetname from excelmetadata where filename='{excel_file}'"
         result = session.execute(cassandra_query)
         for element in result:
-            final_tables[element.sheetname + ":excel"] = element.datafields
+            final_tables.append(element.sheetname + ":excel")
 
     print("JSON : ", request.form.get('selected_primary_keys_forJSON'))
     print("json_filepath : " , json_filepath, " ", type(json_filepath))
@@ -1184,22 +1289,25 @@ def SaveAddedtableMetaData():
         json_filepath = request.form.get('json_filepath')
         filename_pk = json.loads(request.form.get('selected_primary_keys_forJSON'))
         filename, primary_key = next(iter(filename_pk.items()))
-        flattned_columns = [key for key in GetJSONFlattenAttrNames(json_filepath)] # little hack for getting correct data [type]
-        final_tables[filename + ":JSON"] = flattned_columns
-        flattned_columns_string = ','.join(map(str,[f"'{col}'" for col in flattned_columns]))
-        cassandra_query = f"insert into jsonmetadata(filename,filepath,datafields,primary_key) values(" \
+        actual_custom = json.loads(request.form.get('custom_names_json'))
+        datafieldmapper_string = ""
+        for index, (key, value) in enumerate(actual_custom.items()):
+            datafieldmapper_string += f"'{key}':'{value}'"
+            if index == len(actual_custom.items()) - 1:
+                continue
+            datafieldmapper_string += ","
+        final_tables.append(filename + ":JSON")
+        cassandra_query = f"insert into jsonmetadata(filename,filepath,datafieldmapper,primary_key) values(" \
                           f"'{filename}'," \
                           f"'{json_filepath}'," \
-                          f"[{flattned_columns_string}]," \
+                          "{" + f"{datafieldmapper_string}" + "}," \
                           f"'{primary_key}'" \
                           f")"
         session.execute(cassandra_query)
         print(cassandra_query, "\n", "Saved JSON metadata to cassandra using the abobe query \n")
-    elif json_filepath != "None"and json_filepath != "":
+    elif json_filepath != "None" and json_filepath != "":
         json_file = get_filename(json_filepath)
-        cassandra_query = f"select datafields from jsonmetadata where filename='{json_file}'"
-        result = session.execute(cassandra_query)[0]
-        final_tables[json_file + ":JSON"] = result.datafields
+        final_tables.append(json_file + ":JSON")
 
     print("XML : ", request.form.get('selected_primary_keys_forXML'))
     print("xml_filepath : " , xml_filepath, " ", type(xml_filepath))
@@ -1208,27 +1316,28 @@ def SaveAddedtableMetaData():
         xml_filepath = request.form.get('xml_filepath')
         filename_pk = json.loads(request.form.get('selected_primary_keys_forXML'))
         filename, primary_key = next(iter(filename_pk.items()))
-        flattened_columns = GetXMLFlattenAttrNames(xml_filepath)
-        final_tables[filename + ":XML"] = flattened_columns
-        flattned_columns_string = ','.join(map(str,[f"'{col}'" for col in flattened_columns]))
-        cassandra_query = f"insert into xmlmetadata(filename,filepath,datafield,primary_key) values(" \
+        actual_custom = json.loads(request.form.get('custom_names_xml'))
+        datafieldmapper_string = ""
+        for index, (key, value) in enumerate(actual_custom.items()):
+            datafieldmapper_string += f"'{key}':'{value}'"
+            if index == len(actual_custom.items()) - 1:
+                continue
+            datafieldmapper_string += ","
+        final_tables.append(filename + ":XML")
+        cassandra_query = f"insert into xmlmetadata(filename,filepath,datafieldmapper,primary_key) values(" \
                           f"'{filename}'," \
                           f"'{xml_filepath}'," \
-                          f"[{flattned_columns_string}]," \
+                          "{" + f"{datafieldmapper_string}" + "}," \
                           f"'{primary_key}'" \
                           f")"
         session.execute(cassandra_query)
         print(cassandra_query, "\n", "Saved XML metadata to cassandra using the abobe query \n")
     elif xml_filepath != "None" and xml_filepath != "":
         xml_file = get_filename(xml_filepath)
-        cassandra_query = f"select datafield from xmlmetadata where filename='{xml_file}'"
-        result = session.execute(cassandra_query)[0]
-        final_tables[xml_file + ":XML"] = result.datafield
-    # return "Saved data into meta data repo successfully!"
+        final_tables.append(xml_file + ":XML")
 
     return render_template('view_selection.html',tables=final_tables,databasename=db_name,json_filepath=json_filepath,
                            xml_filepath=xml_filepath,excel_filepath=excel_filepath)
-    # return render_template('options.html', databasename=db_name)
 
 @app.route('/process_selection', methods=['POST'])
 def display_data_view():

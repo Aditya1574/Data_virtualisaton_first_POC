@@ -95,6 +95,7 @@ select {
                         <input type="checkbox" name="selected_tables[]" value="{{ table_name }}">
                         {{ table_name }}
                     </label>
+                    <input type="text" id="relational_custom_{{ table_name }}" name="relational_custom_{{ table_name }}" value="{{ table_name }}">
                     <select name="primary_key_{{ table_name }}">
                         <option value="">Select primary Key</option>
                         {% for column in columns %}
@@ -114,6 +115,7 @@ select {
                         <input type="checkbox" name="selected_sheets[]" value="{{ sheetname }}">
                         {{ sheetname }}
                     </label>
+                    <input type="text" id="sheet_custom_{{ sheetname }}" name="sheet_custom_{{ sheetname }}" value="{{ sheetname }}">
                     <select name="primary_key_{{ sheetname }}">
                         <option value="">Select primary Key</option>
                         {% for column in columns %}
@@ -140,6 +142,7 @@ select {
         <div class="json_pk">
            <h3>Select Primary key for {{ json_filename }}</h3>
             <h4>{{ json_filename }}</h4>
+                <input type="text" id="jsonfile_custom_{{ json_filename }}" name="jsonfile_custom_{{ json_filename }}" value="{{ json_filename }}">
                 <select name="json_primary_key">
                     <option value="">Select primary Key</option>
                     {% for column in json_columns %}
@@ -162,6 +165,7 @@ select {
         <div class="xml_pk">
             <h3>Select Primary key for {{ xml_filename }}</h3>
             <h4>{{ xml_filename }}</h4>
+            <input type="text" id="xmlfile_custom_{{ xml_filename }}" name="xmlfile_custom_{{ xml_filename }}" value="{{ xml_filename }}">
                 <select name="xml_primary_key">
                     <option value="">Select primary Key</option>
                     {% for column in xml_columns %}

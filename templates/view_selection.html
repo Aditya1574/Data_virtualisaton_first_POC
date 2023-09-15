@@ -1,134 +1,200 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Select tables</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }
-
-        h1 {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        form {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        li {
-            margin-bottom: 10px;
-        }
-
-        label {
-            display: block;
-            font-weight: bold;
-        }
-
-        select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            outline: none;
-        }
-
-        button[type="submit"] {
-            display: block;
-            width: 100%;
-            background-color: #007BFF;
-            color: #fff;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-         nav {
-            background-color: #333;
-            color: white;
-            padding: 10px;
-            text-align: right;
-        }
-
-        /* Style for the refresh button */
-        nav button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-    </style>
+    <title>Select Data Tables</title>
+    <!-- Include any necessary CSS and JavaScript libraries -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
+<style>
+/* Style for the form container */
+form {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+/* Style for the form header */
+h3 {
+    font-size: 20px;
+    margin-top: 0;
+}
+
+/* Style for the table entries */
+.table-entry {
+    margin-bottom: 10px;
+}
+
+/* Style for the checkboxes */
+input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+/* Style for the "Show Columns" button */
+.show-columns-button {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Style for the modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Style for the modal content */
+.modal-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.75);
+}
+
+/* Style for the close button in the modal */
+.close {
+    float: right;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+/* Style for the "Show Sample Data" button */
+#sampleDataButton {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* Style for the submit button */
+button[type="submit"] {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+/* Style for hidden inputs */
+input[type="hidden"] {
+    display: none;
+}
+
+</style>
 <body>
-    <h1>Select Tables</h1>
-    <form action="/data_selected" method="post" id="addTablesForm">
-        {% for table in tables %}
-        <div class="table-dropdown">
-            <select name="selected_tables[]">
-                <option value="Select Table">Select Table</option>
-                {% for option in tables %}
-                    <option value="{{ option }}">{{ option }}</option>
-                {% endfor %}
-            </select>
+    <form action="/data_selected" method="post" id="selectTablesForm">
+        <!-- Loop through the dictionary of table names and columns -->
+        {% for table_name, columns in table_data.items() %}
+        <div class="table-entry">
+            <input type="checkbox" name="selected_tables[]" value="{{ table_name }}">
+            <label>{{ table_name }}</label>
+            <button class="show-columns-button" data-table="{{ table_name }}">Show Columns</button>
+            <!-- Hidden input to store the table name -->
+            <input type="hidden" name="table_name" value="{{ table_name }}">
         </div>
         {% endfor %}
-        <input type="hidden" id="databasename" name="databasename" value="{{ databasename }}">
+        <!-- Submit button to send selected tables to the backend -->
+	    <input type="hidden" id="databasename" name="databasename" value="{{ databasename }}">
         <input type="hidden" id="excel_filepath" name="excel_filepath" value="{{ excel_filepath }}">
         <input type="hidden" id="json_filepath" name="json_filepath" value="{{ json_filepath }}">
         <input type="hidden" id="xml_filepath" name="xml_filepath" value="{{ xml_filepath }}">
-        <button type="button" id="submitButton" class="submit-button">Add Selected Tables</button>
+        <button type="submit">Submit</button>
     </form>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
-        $(document).ready(function() {
-            $("#submitButton").click(function() {
-                var selectedTables = [];
+    <!-- Modal for displaying column names -->
+    <div id="columnModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Columns for Table: <span id="tableName"></span></h3>
+            <ul id="columnList"></ul>
+            <button id="sampleDataButton">Show Sample Data</button>
+        </div>
+    </div>
 
-                // Loop through the selects to find selected tables.
-                $("select[name='selected_tables[]']").each(function() {
-                    var selectedValue = $(this).val();
-                    if (selectedValue !== "Select Table") {
-                        selectedTables.push(selectedValue);
-                    }
+    <script>
+   // JavaScript code for handling modal and sample data button
+        var modal = document.getElementById('columnModal');
+        var sampleDataButton = document.getElementById('sampleDataButton');
+        // When the user clicks on a "Show Columns" button
+        var showButtons = document.querySelectorAll('.show-columns-button');
+        showButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                var tableName = button.getAttribute('data-table');
+
+                // doing it in 2 steps
+                var table_data_js = JSON.parse('{{ table_data|tojson }}');
+                var columns = table_data_js[tableName]
+                console.log(tableName)
+                console.log(columns)
+
+                // Display column names in the modal
+                document.getElementById('tableName').textContent = tableName;
+                var columnList = document.getElementById('columnList');
+                columnList.innerHTML = '';
+                columns.forEach(function(column) {
+                    var li = document.createElement('li');
+                    li.textContent = column;
+                    columnList.appendChild(li);
                 });
 
-                // Convert the selected tables to a JSON string.
-                var selectedTablesJSON = JSON.stringify(selectedTables);
-
-                // Create a hidden input to store the selected tables.
-                var hiddenInput = $("<input>")
-                    .attr("type", "hidden")
-                    .attr("name", "selected_tables")
-                    .val(selectedTablesJSON);
-
-                // Append the hidden input to the form.
-                $("#addTablesForm").append(hiddenInput);
-
-                // Submit the form.
-                $("#addTablesForm").submit();
+                // Show the modal
+                modal.style.display = 'block';
             });
         });
-    </script>
+
+        // When the user clicks on the modal's close button
+        var closeBtn = document.getElementsByClassName('close')[0];
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+
+        // When the user clicks on the "Show Sample Data" button
+        sampleDataButton.addEventListener('click', function() {
+            var tableName = document.getElementById('tableName').textContent;
+
+            // Create a new form element
+            var form = document.createElement('form');
+
+            // Set the form's attributes
+            form.action = '/see_sample_data';  // Set the action
+            form.method = 'post';              // Set the method to POST
+
+            // Create an input element for the table_name
+            var input = document.createElement('input');
+            input.type = 'hidden';             // Hidden input
+            input.name = 'table_name';         // Set the name
+            input.value = tableName;           // Set the value
+
+            // Append the input element to the form
+            form.appendChild(input);
+
+            // Append the form to the body (or another container element)
+            document.body.appendChild(form);
+
+            // Submit the form to request sample data
+            form.submit();
+        });
+</script>
 </body>
 </html>

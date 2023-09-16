@@ -198,24 +198,24 @@ def check_exceldatabase(filename):
 
 
 def check_jsondatabase(filename):
-    query = "select filename,custom_name from jsonmetadata group by filename"
+    query = "select filename from jsonmetadata group by filename"
     result = session.execute(query)
     for row in result:
-        if row.filename == filename or row.custom_name == filename:
+        if row.filename == filename :
             return True
     return False
 
 def check_xmldatabase(filename):
-    query = "select filename,custom_name from xmlmetadata group by filename"
+    query = "select filename from xmlmetadata group by filename"
     result = session.execute(query)
     for row in result:
-        if row.filename == filename or row.custom_name == filename:
+        if row.filename == filename:
             return True
     return False
 
 
 @app.route('/', methods=['GET'])
-def hello_world():
+def TheRunner():
     return render_template('index.html')
 
 
@@ -264,7 +264,7 @@ def collected_data_processing():
             cassandra_query = f"select custom_name,datafields from relationalmetadata where databasename='{db_name}'"
             result = session.execute(cassandra_query)
             for element in result:
-                final_tables[element.custom_name + ":relational"]  = element.datafields
+                final_tables[element.custom_name + ":relational"] = element.datafields
 
 
         if excel_file:
@@ -276,7 +276,7 @@ def collected_data_processing():
             cassandra_query = f"select filepath from excelmetadata where filename='{excel_file}'  limit 1"
             result = session.execute(cassandra_query)[0]
             excel_filepath = result.filepath
-
+            print("inside of /selected_data  : route excel : ", excel_filepath)
         if json_file:
             # fetch  custom_name and datafieldmapper : values
             cassandra_query = f"select custom_name,datafieldmapper from jsonmetadata where filename='{json_file}' limit 1;"
@@ -285,8 +285,9 @@ def collected_data_processing():
             cassandra_query = f"select filepath from jsonmetadata where filename='{json_file}' limit 1"
             result = session.execute(cassandra_query)[0]
             json_filepath = result.filepath
+            print("inside of /selected_data  : route JSON : ", json_filepath)
         if xml_file:
-            # fetch  custom_name and datafieldmapper : values
+            # fetch  custom_name and datafieldmapper :values
             cassandra_query = f"select custom_name,datafieldmapper from xmlmetadata where filename='{xml_file}' limit 1;"
             result = session.execute(cassandra_query)[0]
             final_tables[result.custom_name + ":XML"] = list(result.datafieldmapper.values())
@@ -315,8 +316,8 @@ def send_to_tableSelection():
     excel_filepath = ""
     # RELATIONAL
     relational_present = request.form.get('relational-data')
-    print("relational_present : ", relational_present, " ", type(relational_present))
-    print("database name : ", databasename," ", type(databasename))
+    # print("relational_present : ", relational_present, " ", type(relational_present))
+    # print("database name : ", databasename," ", type(databasename))
     relational_query_index = dict()
     # database requirements
     host=""
@@ -324,18 +325,18 @@ def send_to_tableSelection():
     password=""
     # EXCEL
     excel_present = request.form.get('excel-data')
-    print("excel_present : ", excel_present, " ", type(excel_present))
-    print("excel_filename : ", excel_filename, " ", type(excel_filename))
+    # print("excel_present : ", excel_present, " ", type(excel_present))
+    # print("excel_filename : ", excel_filename, " ", type(excel_filename))
     excel_query_index = dict()
     # JSON
     json_present = request.form.get('json-data')
-    print("json_present : ", json_present, " ", type(json_present))
-    print("json_filename : ", json_filename, " ", type(json_filename))
+    # print("json_present : ", json_present, " ", type(json_present))
+    # print("json_filename : ", json_filename, " ", type(json_filename))
     json_columns = []
     #   XML
     xml_present = request.form.get('xml-data')
-    print("xml_present : ", xml_present, " ", type(xml_present))
-    print("xml_filename : ", xml_filename, " ", type(xml_filename))
+    # print("xml_present : ", xml_present, " ", type(xml_present))
+    # print("xml_filename : ", xml_filename, " ", type(xml_filename))
     xml_columns = []
 
     if relational_present is not None:
@@ -438,23 +439,58 @@ def send_to_tableSelection():
 
 
 
+def GetActualNameForCustomName(databasetype,custom_name,databasename):
+    actual_name = ""
+    if databasetype == 'relational':
+        cassandra_query = f"select tablename from relationalmetadata where databasename='{databasename}'" \
+                          f" and custom_name='{custom_name}' limit 1;"
+        result = session.execute(cassandra_query)[0]
+        actual_name = result.tablename
+    elif databasetype == 'excel':
+        cassandra_query = f"select sheetname from excelmetadata where filename='{databasename}' " \
+                          f"and custom_name='{custom_name}' limit 1;"
+        print(cassandra_query)
+        result = session.execute(cassandra_query)[0]
+        actual_name = result.sheetname
+    return actual_name
+
 @app.route('/see_sample_data', methods=['POST'])
 def SeeSampleData():
     table_name = request.form.get('table_name')
 
     print(table_name)
     element_name,element_type = BifervateElement(table_name)
-
+    show_df = pd.DataFrame()
+    column_names = []
+    column_names_show = []
     if element_type == 'relational':
-        print(element_name)
+        databasename = request.form.get('databasename')
+        column_names = GetColumnNamesFromMeta(databasename,element_name)
+        column_names_show = column_names
+        tablename = GetActualNameForCustomName(element_type,element_name,databasename)
+        show_df = GetRelationalDataAsDataFrame(databasename,tablename,column_names)
     elif element_type == 'excel':
-        print(element_name)
+        excel_filepath = request.form.get('excel_filepath')
+        excel_filename = get_filename(excel_filepath)
+        print("excel_filepath : ", excel_filepath)
+        column_names = GetActualColumnNamesFromSheetNameFromMeta(excel_filepath,element_name)
+        column_names_show = GetColumnNamesFromSheetNameFromMeta(excel_filepath,element_name)
+        sheetname = GetActualNameForCustomName(element_type, element_name, excel_filename)
+        show_df = GetExcelDataAsDataFrame(excel_filepath,sheetname,column_names)
     elif element_type == 'JSON':
-        print(element_name)
+        json_filepath = request.form.get('json_filepath')
+        column_names_show = GetJSONFlattenAttrNamesFromMeta(json_filepath)
+        column_names = GetActualJSONFlattenAttrNamesFromMeta(json_filepath)
+        show_df = GetJSONDataAsDataFrame(json_filepath,column_names)
     elif element_type == 'XML':
-        print(element_name)
+        xml_filepath = request.form.get('xml_filepath')
+        column_names = GetActualXMLFlattenAttrNamesFromMeta(xml_filepath)
+        column_names_show = GetXMLFlattenAttrNamesFromMeta(xml_filepath)
+        show_df = GetXMLDataAsDataFrame(xml_filepath,column_names)
 
-    return f"got {table_name} successfully!"
+
+
+    return render_template('combined_result.html',dataframe=show_df,actual_columns=column_names,columns=column_names_show)
 
 def GetColumnNamesFromMeta(databasename,custom_name):
     # searching using custom_name as only that is available per table in databasee
@@ -464,12 +500,23 @@ def GetColumnNamesFromMeta(databasename,custom_name):
 
 def GetColumnNamesFromSheetNameFromMeta(excel_filepath,custom_name):
     excel_filename = get_filename(excel_filepath)
+    print(excel_filename)
     # searching using custom_name as only that is available per sheet in the excel_file[name]
-    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and custom_name='{custom_name}';"
+    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and custom_name='{custom_name}'"
     result = session.execute(query)[0]
-    column_names = []
-    for key,value in result.datafieldmapper.items():
-        column_names.append(value)
+    column_names = list(result.datafieldmapper.values())
+    return column_names
+
+
+def GetActualColumnNamesFromSheetNameFromMeta(excel_filepath,custom_name):
+    excel_filename = get_filename(excel_filepath)
+    print("inside the get actual name function : ", excel_filename)
+    # searching using custom_name as only that is available per sheet in the excel_file[name]
+    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' AND custom_name='{custom_name}'"
+    print(query)
+    result = session.execute(query).one()
+    print(result)
+    column_names = list(result.datafieldmapper.keys())
     return column_names
 
 
@@ -478,21 +525,32 @@ def GetXMLFlattenAttrNamesFromMeta(xml_filepath):
     # searching using filename as filename is available using the filepath
     query = f"select datafieldmapper from xmlmetadata where filename='{xml_filename}';"
     result = session.execute(query)[0]
-    AttrNames = []
-    for key,value in result.datafieldmapper.items():
-        AttrNames.append(value)
-
+    AttrNames = list(result.datafieldmapper.values())
     return AttrNames
+
+def GetActualXMLFlattenAttrNamesFromMeta(xml_filepath):
+    xml_filename = get_filename(xml_filepath)
+    # searching using filename as filename is available using the filepath
+    query = f"select datafieldmapper from xmlmetadata where filename='{xml_filename}';"
+    result = session.execute(query)[0]
+    AttrNames = list(result.datafieldmapper.values())
+    return AttrNames
+
 
 def GetJSONFlattenAttrNamesFromMeta(json_filepath):
     json_filename = get_filename(json_filepath)
     # searching using filename as filename is available using the filepath
     query = f"select datafieldmapper from jsonmetadata where filename='{json_filename}';"
     result = session.execute(query)[0]
-    AttrNames = []
-    for key,value in result.datafieldmapper.items():
-        AttrNames.append(value)
+    AttrNames = list(result.datafieldmapper.values())
+    return AttrNames
 
+def GetActualJSONFlattenAttrNamesFromMeta(json_filepath):
+    json_filename = get_filename(json_filepath)
+    # searching using filename as filename is available using the filepath
+    query = f"select datafieldmapper from jsonmetadata where filename='{json_filename}';"
+    result = session.execute(query)[0]
+    AttrNames = list(result.datafieldmapper.keys())
     return AttrNames
 
 def GetXMLFlattenAttrNamesFromSource(xml_filepath):
@@ -537,8 +595,8 @@ def ReverseDict(original_dict):
     return reversed_dict
 
 
-def ExcelCustomToOrignal(excel_filename,values,sheetname):
-    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and sheetname='{sheetname}';"
+def ExcelCustomToOrignal(excel_filename,values,custom_name):
+    query = f"select datafieldmapper from excelmetadata where filename='{excel_filename}' and custom_name='{custom_name}';"
     result = session.execute(query)[0]
 
     customtoorignal = ReverseDict(result.datafieldmapper)
@@ -601,9 +659,9 @@ def generate_columns():
 
     print(final_tables_data)
 
-    # return "Data is selected look into the python console.!"
-    return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename,
-                           excel_filepath=excel_filepath,json_filepath=json_filepath,xml_filepath=xml_filepath)
+    return "Data is selected look into the python console.!"
+    # return render_template('multiple_ds_select_join_data.html', data=final_tables_data,databasename=databasename,
+    #                        excel_filepath=excel_filepath,json_filepath=json_filepath,xml_filepath=xml_filepath)
 
 
 def GetRelationalDataAsDataFrame(databasename, table_name, column_names):
@@ -651,7 +709,7 @@ def GetJSONDataAsDataFrame(json_filepath,attr_names):
     json_df = pd.DataFrame(json_flattened_data)
     # print("JSON Dataframe \n", json_df)
 
-    return json_df
+    return json_df[attr_names]
 
 def GetXMLDataAsDataFrame(xml_filepath,attr_names):
     xml_data = ""
@@ -675,7 +733,7 @@ def GetXMLDataAsDataFrame(xml_filepath,attr_names):
     # DF_XML
     xml_df = pd.DataFrame(xml_flattened_data)
 
-    return xml_df
+    return xml_df[attr_names]
 
 def GetExcelDataAsDataFrame(excel_filepath,sheet_name,colunms):
     try:
@@ -695,7 +753,7 @@ def BifervateElement(element):
     end = element.find(':')
     return element[:end],element[start + 1:]
 
-def ConvertDICTCustomToOrignal(table_columns,excel_filename):
+def ConvertDICTCustomToOrignal(table_columns,excel_filename,json_filename,xml_filename):
     table_columns_orignal = dict()
     for key,values in table_columns.items():
         element_name,element_type = BifervateElement(key)
@@ -704,12 +762,12 @@ def ConvertDICTCustomToOrignal(table_columns,excel_filename):
         elif element_type == 'excel':
             table_columns_orignal[key] = ExcelCustomToOrignal(excel_filename,values,element_name)
         elif element_type == 'JSON':
-            table_columns_orignal[key] = JSONCustomToOrignal(element_name,values)
+            table_columns_orignal[key] = JSONCustomToOrignal(json_filename,values)
         elif element_type == 'XML':
-            table_columns_orignal[key] = XMLCustomToOrignal(element_name,values)
+            table_columns_orignal[key] = XMLCustomToOrignal(xml_filename,values)
     return table_columns_orignal
 
-def ConvertJoiningConditionsToOrignal(table_joining_conditions,excel_filename):
+def ConvertJoiningConditionsToOrignal(table_joining_conditions,excel_filename,json_filename,xml_filename):
     table_joining_conditions_orignal = dict()
     print(table_joining_conditions)
     for index,(key,value) in enumerate(table_joining_conditions.items()):
@@ -732,13 +790,13 @@ def ConvertJoiningConditionsToOrignal(table_joining_conditions,excel_filename):
             table_joining_conditions_orignal[key] = new_dict
         elif element_type == 'JSON':
             new_dict = dict()
-            new_values = JSONCustomToOrignal(element_name, value['join_columns'])
+            new_values = JSONCustomToOrignal(json_filename, value['join_columns'])
             new_dict['join_table'] = element
             new_dict['join_columns'] = new_values
             table_joining_conditions_orignal[key] = new_dict
         elif element_type == 'XML':
             new_dict = dict()
-            new_values = XMLCustomToOrignal(element_name, value['join_columns'])
+            new_values = XMLCustomToOrignal(xml_filename, value['join_columns'])
             new_dict['join_table'] = element
             new_dict['join_columns'] = new_values
             table_joining_conditions_orignal[key] = new_dict
@@ -760,23 +818,13 @@ def DataJoiner():
 
 
     table_column = json.loads(request.form.get('displayColumnsData'))
-    table_column_orignal = ConvertDICTCustomToOrignal(table_column,excel_filename)
+    table_column_orignal = ConvertDICTCustomToOrignal(table_column,excel_filename,json_filename,xml_filename)
 
     table_join_conditions = json.loads(request.form.get('joinConditionsData'))
-    table_join_conditions_orignal = ConvertJoiningConditionsToOrignal(table_join_conditions,excel_filename)
+    table_join_conditions_orignal = ConvertJoiningConditionsToOrignal(table_join_conditions,excel_filename,json_filename,xml_filename)
 
     table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
-    table_joining_keys_orignal = ConvertDICTCustomToOrignal(table_joining_keys,excel_filename)
-
-    # print("custom : ",table_column)
-    # print("orignal : ",table_column_orignal)
-    #
-    # print("custom  : ",table_joining_keys)
-    # print("orignal : ",table_joining_keys_orignal)
-    #
-    # print("custom : ",table_join_conditions)
-    # print("orignal : ",table_join_conditions_orignal)
-
+    table_joining_keys_orignal = ConvertDICTCustomToOrignal(table_joining_keys,excel_filename,json_filename,xml_filename)
 
     print("inside /get_join_data : \n")
 
@@ -785,9 +833,11 @@ def DataJoiner():
     element, values = next(iter(table_column.items()))
     element_name, element_type = BifervateElement(element)
 
+    ele_custom,value_custom = next(iter(table_column.items()))
     ele_orignal,value_orignal = next(iter(table_column_orignal.items()))
     columns_required = value_orignal
-    print(element_name, " : ",element_type )
+    columns_required_show = value_custom
+    # print(element_name,  " : ",element_type )
     # joining columns for the current column
     joining_keys_for_element = table_joining_keys[element]
     # getting all the required columns : (columns requested by the user UNION columns required for joining)
@@ -826,15 +876,12 @@ def DataJoiner():
         if element_type == 'relational':
             joining_df = GetRelationalDataAsDataFrame(databasename, element_name, values)
         elif element_type == 'excel':
-            excel_filename = get_filename(excel_filepath)
             values = ExcelCustomToOrignal(excel_filename, values,element_name)
             joining_df = GetExcelDataAsDataFrame(excel_filepath, element_name, values)
         elif element_type == 'JSON':
-            json_filename = get_filename(json_filepath)
             values = JSONCustomToOrignal(json_filename, values)
             joining_df = GetJSONDataAsDataFrame(json_filepath, values)
         elif element_type == 'XML':
-            xml_filename = get_filename(xml_filepath)
             values = XMLCustomToOrignal(xml_filename, values)
             joining_df = GetXMLDataAsDataFrame(xml_filepath, values)
 
@@ -889,7 +936,7 @@ def DataJoiner():
         )
         # this is representing the custom names
         columns_required = columns_required + table_column_orignal[joining_to]
-
+        columns_required_show = columns_required_show + table_column[joining_to]
 
     print("Complete data Frame : \n",final_df)
     print("Trimmed data Frame : \n",final_df[columns_required])
@@ -898,128 +945,12 @@ def DataJoiner():
     # final_df[columns_required] :  all the data
     # columns_required : required_columns
 
-    return render_template('combined_result.html',dataframe=final_df[columns_required],columns=columns_required)
-
-@app.route('/check_database', methods=['POST'])
-def check_db_existence():
-    partition_key_name = request.form.get('db_name')
-    query = "select databasename from relationalmetadata group by databasename"
-    result = session.execute(query)
-    for row in result:
-        if row.databasename == partition_key_name:
-            query_index = menuMaker(partition_key_name)
-            return render_template('options.html', databasename=partition_key_name)
-    return render_template('Nodb_filler.html')
-
-@app.route("/process_form", methods=['POST'])
-def DBMiddleWareBeforeSavingMetaData():
-    query_index = dict()
-    host = request.form.get('hostname')
-    user = request.form.get('username')
-    password = request.form.get('password')
-    database = request.form.get('database')
-
-    db_config = {
-        "host": f"{host}",
-        "user": f"{user}",
-        "password": f"{password}",
-        "database": f"{database}"
-    }
-
-    table_to_dataFields = dict()
-    # Connect to the MySQL database
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-
-    # Replace with the desired table name
-    query = "SHOW TABLES"
-
-    # Execute the query
-    cursor.execute(query)
-
-    # Fetch the table names
-    tables = cursor.fetchall()
-
-    # Extract table names from the fetched data
-    table_names = [table[0] for table in tables]
-    for table_name in table_names:
-        try:
-            # Construct the query to retrieve column information
-            query = f"SHOW COLUMNS FROM {table_name}"
-
-            # Execute the query
-            cursor.execute(query)
-
-            # Fetch the column information
-            columns = cursor.fetchall()
-
-            # this goes up for being displayed in the front-end
-            column_names_to_display = [column[0] for column in columns]
-            query_index[table_name] = column_names_to_display
-
-        except mysql.connector.Error as err:
-            print("Error:", err)
-
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
-    return render_template('table_primary_key.html',data=query_index,host=host,user=user,password=password, databasename=database)
+    return render_template('combined_result.html',dataframe=final_df[columns_required],actual_columns=columns_required,columns=columns_required_show)
 
 
-@app.route("/fulltabledata", methods=['POST'])
-def SaveMetaDataToCassandra():
-    databasename = request.form.get('dataBaseName')
-    host = request.form.get('host')
-    user = request.form.get('user')
-    password = request.form.get('password')
-    tableName_primaryKey = json.loads(request.form.get('primary_key_details'))
-
-    db_config = {
-        "host": f"{host}",
-        "user": f"{user}",
-        "password": f"{password}",
-        "database": f"{databasename}"
-    }
-    db_config_string = f"host: '{host}',user : '{user}',password: '{password}', database : '{databasename}'"
-    # Connect to the MySQL database
-    print(db_config_string, "\n", tableName_primaryKey)
-
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-
-    # for table_name, primary_key in tableName_primaryKey.items():
-    #     print(type(table_name),type(primary_key))
-    #     print(table_name,primary_key)
 
 
-    for table_name,primary_key in tableName_primaryKey.items():
-        try:
-            query = f"SHOW COLUMNS FROM {table_name}"
 
-            cursor.execute(query)
-
-            # Fetch the column information
-            columns = cursor.fetchall()
-            column_names = [f"'{column[0]}'" for column in columns]
-            column_names_string = ','.join(map(str, column_names))
-
-            cassandra_query = f"insert into relationalmetadata(databasename,primary_key,tablename,db_config,datafields) values(" \
-                              f"'{databasename}'," \
-                              f"'{primary_key}'," \
-                              f"'{table_name}'," \
-                              "{" + f"{db_config_string}" + "}," \
-                              f"[{column_names_string}]" \
-                              f");"
-            print(cassandra_query, "\n", "Saving Table metadata to cassandra using the abobe query \n")
-            session.execute(cassandra_query)
-
-        except mysql.connector.Error as err:
-            print("Error:", err)
-
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
-    return render_template('options.html',databasename=databasename)
 
 @app.route('/options',methods=['POST'])
 def option_selection_middleware():
@@ -1165,67 +1096,9 @@ def correct_Cassandra():
 
     return render_template('Select_tables_for_report.html',databasename=database_name,tables=correct_tables)
 
-@app.route('/view_gen_report', methods=['POST'])
-def View_Report():
-    report_name = request.form.get('report_name')
-    database_name = request.form.get('database_name')
-
-    cassandra_query = f"select query_for_report,columns from generated_report_data where databasename='{database_name}' and report_name='{report_name}'"
-    result = session.execute(cassandra_query)[0]
-
-    query = result.query_for_report
 
 
-    res = session.execute(f"select db_config from relationalmetadata where databasename='{database_name}' limit 1")[0]
 
-    db_config = {
-        "host": f"{res.db_config.host}",
-        "user": f"{res.db_config.user}",
-        "password": f"{res.db_config.password}",
-        "database": f"{res.db_config.database}"
-    }
-
-    fetched_data = []
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-    try:
-        # Execute the query
-        start_time = time.time()
-        cursor.execute(query)
-        end_time = time.time()
-
-        print("time taken for sql db query ", end_time - start_time)
-        # Fetch all the rows
-        fetched_data = cursor.fetchall()
-        # print("in the data /view_gen_report route : ", fetched_data)
-        # print the rows or do whatever you want wit)h the rows
-    except mysql.connector.Error as err:
-        print("Error:", err)
-
-    cursor.close()
-    connection.close()
-
-    # return "got the query for report"
-    return render_template('fetched_data.html', columns=result.columns, rows=fetched_data,
-                           databasename=database_name,report_not_present=False)
-
-@app.route('/selected_tables', methods=['POST'])
-def collect_tables():
-    selected_tables = json.loads(request.form.get('selected_tables'))
-    databasename = request.form.get('dataBaseName')
-
-
-    query_index = OrderedDict()
-
-    for table_name in selected_tables:
-        cassandra_query = f"select datafields from relationalmetadata where databasename='{databasename}' and tablename='{table_name}'"
-        result = session.execute(cassandra_query)[0]
-        query_index[table_name] = result.datafields
-
-    print(selected_tables)
-    print(query_index)
-    # return f"data retrieved successfullly from {databasename}"
-    return render_template('collect_column_jk.html', data=query_index,databasename=databasename)
 
 @app.route('/addTableHandler',methods=['POST'])
 def SaveAddedtableMetaData():
@@ -1342,7 +1215,7 @@ def SaveAddedtableMetaData():
             datafieldmapper_string += ","
 
         custom_name = request.form[f"jsonfile_custom_{filename}"]
-        final_tables.append[custom_name + ":JSON"] = list(actual_custom.values())
+        final_tables[custom_name + ":JSON"] = list(actual_custom.values())
         cassandra_query = f"insert into jsonmetadata(filename,custom_name,filepath," \
                           f"datafieldmapper,primary_key) values(" \
                           f"'{filename}'," \
@@ -1397,47 +1270,8 @@ def SaveAddedtableMetaData():
     return render_template('view_selection.html',table_data=final_tables,databasename=db_name,json_filepath=json_filepath,
                            xml_filepath=xml_filepath,excel_filepath=excel_filepath)
 
-@app.route('/process_selection', methods=['POST'])
-def display_data_view():
-    db_name = request.form.get('dataBaseName')
-    table_column = json.loads(request.form.get('displayColumnsData'))
-    table_join_conditions = json.loads(request.form.get('joinConditionsData'))
-    table_joining_keys = json.loads(request.form.get('joinedColumnsData'))
-    column_info = []
-    print("inside /process_selection : \n")
-    print("displayColumnsdata : ", table_column)
-    print("joinConditionsData : ",table_joining_keys)
-    print("joinedColumnsData : ",table_join_conditions)
-
-    for key,value in table_column.items():
-        column_info = column_info + value
-
-    print(column_info)
 
 
-    # return f"successfully recieved data for generating report {databasename}"
-    # print(columns_info)
-    fetched_data,query,columns_to_save = DataRetriver(db_name,table_column,table_join_conditions,table_joining_keys)
-    # print(fetched_data)
-    # redis_sql(fetched_data)
-    # return f"Data retrived successfully from the {databasename} db!"
-
-    return render_template('fetched_data.html',columns=column_info,rows=fetched_data,databasename=db_name,
-                           query_generated=query,columns_to_save=columns_to_save,report_not_present=True)
-
-@app.route('/save_report',methods=['POST'])
-def save_report():
-    report_name = request.form.get('report_name')
-    databasename = request.form.get('dataBaseName')
-    query = request.form.get('query_generated')
-    columns_to_save = request.form.get('columns_to_save')
-    # print("data for generated report primary key  : ", request.form['selected_pk_report'])
-    pk_report =  request.form['selected_pk_report']
-    cassandra_query = f"insert into generated_report_data(databasename,report_name,query_for_report,columns,pk_report) values('{databasename}','{report_name}','{query}',[{columns_to_save}],'{pk_report}')"
-
-    session.execute(cassandra_query)
-
-    return render_template('options.html',databasename=databasename)
 
 
 
@@ -1455,83 +1289,7 @@ def redis_sql(data):
     except Exception as e:
         print('something went wrong!', e)
 
-def menuMaker(database) -> dict():
-    selected_columns_from_tables = dict()
-    cassandra_query = f"select * from relationalmetadata where databasename='{database}'"
-    result = session.execute(cassandra_query)
-    for row in result:
-         selected_columns_from_tables[row.tablename] = row.datafields
-    # print(selected_columns_from_tables) #debugging statements
-    return selected_columns_from_tables
 
-def afterON(table1,table2,join1,join2):
-    query = f"{table1}.{join1[0]} = {table2}.{join2[0]}"
-    if len(join1) == 1:
-        return query
-    for i in range(1,len(join1)):
-        query += f" and {table1}.{join1[i]} = {table2}.{join2[i]}"
-    return query
-
-def DataRetriver(database,query_index,table_joining_conditions,joining_keys):
-    rows = []
-    cassandra_query = f"select db_config from relationalmetadata where databasename='{database}' limit 1"
-    result = session.execute(cassandra_query)[0]
-    db_config = {
-        "host": f"{result.db_config.host}",
-        "user": f"{result.db_config.user}",
-        "password": f"{result.db_config.password}",
-        "database": f"{result.db_config.database}"
-    }
-
-    columns_info = ""
-    colunms_to_save = []
-    for i, (key,value) in enumerate(query_index.items()):
-        table_name = key
-        for index,element in enumerate(value):
-            colunms_to_save.append(f"'{element}'")
-            columns_info += f"{table_name}.{element}"
-            if index == len(value) - 1:
-                continue
-            columns_info += ","
-        if i == len(query_index.items()) - 1:
-            continue
-        columns_info += ","
-    colunms_to_save_string = ",".join(colunms_to_save)
-    table_names = []
-    for (key,value) in query_index.items():
-        table_names.append(key)
-
-    query = f"select  {columns_info} from {table_names[0]}"
-
-
-    no_of_tables = len(table_names)
-    for i in range(1,no_of_tables):
-        table1 = table_names[i-1]
-        table2 = table_joining_conditions[table_names[i-1]]['join_table']
-        join_conditions = afterON(table1,table2,joining_keys[table1],table_joining_conditions[table1]['join_columns'])
-        query += f" inner join {table_names[i]} on {join_conditions}"
-
-    print(query)
-
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-    try:
-        # Execute the query
-        start_time = time.time()
-        cursor.execute(query)
-        end_time = time.time()
-
-        print("time taken for sql db query ", end_time - start_time)
-        # Fetch all the rows
-        rows = cursor.fetchall()
-        # print("inside data retriever function : ", rows)
-        # print the rows or do whatever you want wit)h the rows
-    except mysql.connector.Error as err:
-        print("Error:", err)
-
-    cursor.close()
-    connection.close()
-    return rows,query,colunms_to_save_string
 
 
 

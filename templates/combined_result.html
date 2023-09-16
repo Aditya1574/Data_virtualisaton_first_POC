@@ -37,7 +37,7 @@
         <tbody>
             {% for index, row in dataframe.iterrows() %}
             <tr>
-                {% for col in columns %}
+                {% for col in actual_columns %}
                 <td>{{ row[col] }}</td>
                 {% endfor %}
             </tr>

@@ -133,21 +133,18 @@ input[type="hidden"] {
     </div>
 
     <script>
-   // JavaScript code for handling modal and sample data button
+        // JavaScript code for handling modal and sample data button
         var modal = document.getElementById('columnModal');
         var sampleDataButton = document.getElementById('sampleDataButton');
         // When the user clicks on a "Show Columns" button
         var showButtons = document.querySelectorAll('.show-columns-button');
         showButtons.forEach(function(button) {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
                 var tableName = button.getAttribute('data-table');
-
-                // doing it in 2 steps
+                // doing it in 2 steps as one step does not suffice
                 var table_data_js = JSON.parse('{{ table_data|tojson }}');
-                var columns = table_data_js[tableName]
-                console.log(tableName)
-                console.log(columns)
-
+                var columns = table_data_js[tableName];
                 // Display column names in the modal
                 document.getElementById('tableName').textContent = tableName;
                 var columnList = document.getElementById('columnList');
@@ -175,8 +172,8 @@ input[type="hidden"] {
 
             // Create a new form element
             var form = document.createElement('form');
-
             // Set the form's attributes
+
             form.action = '/see_sample_data';  // Set the action
             form.method = 'post';              // Set the method to POST
 
@@ -186,8 +183,36 @@ input[type="hidden"] {
             input.name = 'table_name';         // Set the name
             input.value = tableName;           // Set the value
 
-            // Append the input element to the form
+            // for relational databasee
+            var relational_input = document.createElement('input');
+            relational_input.type = 'hidden';             // Hidden input
+            relational_input.name = 'databasename';         // Set the name
+            relational_input.value = '{{ databasename }}';           // Set the value
+
+            // for excel filepath
+            var excel_input = document.createElement('input');
+            excel_input.type = 'hidden';             // Hidden input
+            excel_input.name = 'excel_filepath';         // Set the name
+            excel_input.value = '{{ excel_filepath.replace('\\','\\\\')|safe }}';           // Set the value
+            localStorage.setItem('excel_filepath : ', '{{ excel_filepath.replace('\\','\\\\')|safe }}');
+            // for json filepath
+            var json_input = document.createElement('input');
+            json_input.type = 'hidden';             // Hidden input
+            json_input.name = 'json_filepath';         // Set the name
+            json_input.value = '{{ json_filepath.replace('\\','\\\\')|safe }}';           // Set the value
+
+            //for xml filepath
+            var xml_input = document.createElement('input');
+            xml_input.type = 'hidden';             // Hidden input
+            xml_input.name = 'xml_filepath';         // Set the name
+            xml_input.value = '{{ xml_filepath.replace('\\','\\\\')|safe }}';           // Set the value
+
+            // Append the input elements to the form
             form.appendChild(input);
+            form.appendChild(relational_input);
+            form.appendChild(excel_input);
+            form.appendChild(json_input);
+            form.appendChild(xml_input);
 
             // Append the form to the body (or another container element)
             document.body.appendChild(form);
